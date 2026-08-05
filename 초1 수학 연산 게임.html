@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>5분 수학 탐험</title>
+  <style>
+    /* 기본 리셋 및 폰트 설정 */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', '맑은 고딕', sans-serif;
+      background: linear-gradient(135deg, #e0f7fa 0%, #fff9c4 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #333;
+      padding: 12px;
+      overflow-x: hidden;
+    }
+
+    /* 전체 프레임 컨테이너 */
+    .game-container {
+      width: 100%;
+      max-width: 540px;
+      background-color: #ffffff;
+      border-radius: 28px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+      border: 4px solid #4fc3f7;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      min-height: 620px;
+      justify-content: space-between;
+    }
+
+    /* 화면 전환용 공통 스타일 */
+    .screen {
+      width: 100%;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      animation: fadeIn 0.3s ease-in-out;
+    }
+
+    .screen.active {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ---------------- 시작 화면 ---------------- */
+    .start-title {
+      font-size: 36px;
+      font-weight: 900;
+      color: #0288d1;
+      margin-top: 15px;
+      margin-bottom: 10px;
+      text-shadow: 2px 2px 0px #e1f5fe;
+    }
+
+    .start-badge {
+      font-size: 50px;
+      margin: 10px 0;
+      animation: bounce 1.5s infinite alternate;
+    }
+
+    @keyframes bounce {
+      from { transform: translateY(0); }
+      to { transform: translateY(-10px); }
+    }
+
+    .start-desc {
+      font-size: 20px;
+      font-weight: bold;
+      color: #37474f;
+      margin-bottom: 20px;
+      word-break: keep-all;
+      line-height: 1.4;
+    }
+
+    .rules-card {
+      background-color: #fffde7;
+      border: 3px dashed #fbc02d;
+      border-radius: 20px;
+      padding: 16px 20px;
+      width: 100%;
+      margin-bottom: 25px;
+      text-align: left;
+    }
+
+    .rules-card h3 {
+      font-size: 20px;
+      color: #f57f17;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .rules-card ul {
+      list-style: none;
+    }
+
+    .rules-card li {
+      font-size: 18px;
+      font-weight: bold;
+      color: #555;
+      margin: 6px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* 공통 큰 버튼 스타일 */
+    .btn-main {
+      width: 100%;
+      min-height: 60px;
+      background: linear-gradient(to bottom, #81c784, #4caf50);
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: bold;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 #2e7d32;
+      transition: transform 0.1s, box-shadow 0.1s;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-main:active {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 #2e7d32;
+    }
+
+    /* ---------------- 문제 화면 ---------------- */
+    /* 대시보드 (점수, 남은시간, 맞힌개수) */
+    .dashboard {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 15px;
+    }
+
+    .dash-box {
+      flex: 1;
+      background-color: #f1f8e9;
+      border: 2px solid #aed581;
+      border-radius: 16px;
+      padding: 8px 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .dash-label {
+      font-size: 15px;
+      font-weight: bold;
+      color: #558b2f;
+      margin-bottom: 2px;
+    }
+
+    .dash-value {
+      font-size: 22px;
+      font-weight: 900;
+      color: #2e7d32;
+    }
+
+    .dash-box.time-box {
+      background-color: #fff3e0;
+      border-color: #ffb74d;
+    }
+
+    .dash-box.time-box .dash-label {
+      color: #e65100;
+    }
+
+    .dash-box.time-box .dash-value {
+      color: #d84315;
+    }
+
+    /* 타이머 긴급 강조 효과 */
+    .dash-box.time-box.urgent {
+      background-color: #ffebee;
+      border-color: #e57373;
+      animation: pulse 0.6s infinite alternate;
+    }
+
+    .dash-box.time-box.urgent .dash-value {
+      color: #c62828;
+    }
+
+    @keyframes pulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.05); }
+    }
+
+    /* 문제 카드 영역 */
+    .question-card {
+      width: 100%;
+      background-color: #e3f2fd;
+      border: 3px solid #90caf9;
+      border-radius: 22px;
+      padding: 16px 12px;
+      margin-bottom: 12px;
+      min-height: 150px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
+    .question-category {
+      font-size: 18px;
+      font-weight: bold;
+      color: #1565c0;
+      background-color: #ffffff;
+      padding: 4px 14px;
+      border-radius: 12px;
+      margin-bottom: 8px;
+      display: inline-block;
+    }
+
+    .question-text {
+      font-size: 20px;
+      font-weight: bold;
+      color: #263238;
+      margin-bottom: 8px;
+      word-break: keep-all;
+      line-height: 1.3;
+    }
+
+    .question-visual {
+      font-size: 26px;
+      margin: 6px 0;
+      letter-spacing: 2px;
+      word-break: break-all;
+    }
+
+    .question-math {
+      font-size: 42px;
+      font-weight: 900;
+      color: #0d47a1;
+      letter-spacing: 2px;
+    }
+
+    /* 입력 답안 표시 칸 */
+    .answer-display {
+      width: 100%;
+      height: 54px;
+      background-color: #ffffff;
+      border: 3px solid #b0bec5;
+      border-radius: 16px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 32px;
+      font-weight: 900;
+      color: #1a237e;
+      margin-bottom: 10px;
+    }
+
+    .answer-display.placeholder {
+      color: #b0bec5;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    /* 메시지/피드백 영역 */
+    .feedback-msg {
+      min-height: 32px;
+      font-size: 20px;
+      font-weight: bold;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .feedback-msg.correct { color: #2e7d32; }
+    .feedback-msg.wrong { color: #c62828; }
+    .feedback-msg.warn { color: #ef6c00; }
+
+    /* 숫자 키패드 */
+    .keypad {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .key-btn {
+      min-height: 56px;
+      font-size: 26px;
+      font-weight: 900;
+      background-color: #ffffff;
+      color: #37474f;
+      border: 2px solid #cfd8dc;
+      border-radius: 16px;
+      cursor: pointer;
+      box-shadow: 0 4px 0 #b0bec5;
+      transition: all 0.08s ease;
+      touch-action: manipulation;
+    }
+
+    .key-btn:active {
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 #b0bec5;
+      background-color: #eceff1;
+    }
+
+    .key-btn.action-clear {
+      background-color: #fff3e0;
+      color: #e65100;
+      border-color: #ffe0b2;
+      box-shadow: 0 4px 0 #ffcc80;
+      font-size: 20px;
+    }
+
+    .key-btn.action-clear:active {
+      box-shadow: 0 1px 0 #ffcc80;
+      background-color: #ffe0b2;
+    }
+
+    .key-btn.action-submit {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+      border-color: #c8e6c9;
+      box-shadow: 0 4px 0 #a5d6a7;
+      font-size: 20px;
+    }
+
+    .key-btn.action-submit:active {
+      box-shadow: 0 1px 0 #a5d6a7;
+      background-color: #c8e6c9;
+    }
+
+    .key-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    /* ---------------- 축하 애니메이션 (별 이펙트) ---------------- */
+    .celebration-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+    }
+
+    .star-pop {
+      font-size: 80px;
+      animation: popStar 0.6s ease-out forwards;
+    }
+
+    @keyframes popStar {
+      0% { transform: scale(0.2) rotate(0deg); opacity: 0; }
+      50% { transform: scale(1.3) rotate(180deg); opacity: 1; }
+      100% { transform: scale(1) rotate(360deg); opacity: 0; }
+    }
+
+    /* ---------------- 결과 화면 ---------------- */
+    .result-title {
+      font-size: 32px;
+      font-weight: 900;
+      color: #2e7d32;
+      margin-top: 10px;
+      margin-bottom: 8px;
+    }
+
+    .grade-badge {
+      background: linear-gradient(135deg, #fff9c4, #fff176);
+      border: 3px solid #fbc02d;
+      border-radius: 50px;
+      padding: 8px 24px;
+      font-size: 24px;
+      font-weight: 900;
+      color: #f57f17;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    }
+
+    .result-card {
+      width: 100%;
+      background-color: #f5f5f5;
+      border-radius: 20px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .result-item {
+      background-color: #ffffff;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .result-item .item-label {
+      font-size: 15px;
+      color: #666;
+      font-weight: bold;
+    }
+
+    .result-item .item-val {
+      font-size: 22px;
+      font-weight: 900;
+      color: #333;
+      margin-top: 2px;
+    }
+
+    .encourage-msg {
+      font-size: 19px;
+      font-weight: bold;
+      color: #1565c0;
+      margin-bottom: 20px;
+      word-break: keep-all;
+      line-height: 1.4;
+    }
+
+    /* 미디어 쿼리 (스마트폰 반응형 최적화) */
+    @media (max-height: 680px) {
+      .game-container {
+        padding: 12px;
+        min-height: auto;
+      }
+      .question-card {
+        min-height: 120px;
+        padding: 10px;
+      }
+      .question-math {
+        font-size: 36px;
+      }
+      .key-btn {
+        min-height: 48px;
+        font-size: 22px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="game-container">
+    <!-- 정답 축하 오버레이 -->
+    <div id="celebration" class="celebration-overlay">
+      <div class="star-pop">⭐</div>
+    </div>
+
+    <!-- 1. 시작 화면 -->
+    <div id="start-screen" class="screen active">
+      <div class="start-badge">🚀</div>
+      <h1 class="start-title">5분 수학 탐험</h1>
+      <p class="start-desc">덧셈, 뺄셈, 모으기, 가르기 문제를 풀어 보세요!</p>
+      
+      <div class="rules-card">
+        <h3>📌 게임 규칙</h3>
+        <ul>
+          <li>🎯 정답을 맞히면 <strong>10점!</strong></li>
+          <li>⏱️ <strong>5분 동안</strong> 힘껏 도전해요!</li>
+          <li>숫자 버튼을 눌러 답을 입력해요.</li>
+        </ul>
+      </div>
+
+      <button id="start-btn" class="btn-main" onclick="startGame()">
+        <span>🎮</span> 게임 시작
+      </button>
+    </div>
+
+    <!-- 2. 문제 화면 -->
+    <div id="game-screen" class="screen">
+      <!-- 대시보드 -->
+      <div class="dashboard">
+        <div class="dash-box">
+          <span class="dash-label">현재 점수</span>
+          <span id="score-display" class="dash-value">0점</span>
+        </div>
+        <div id="time-box" class="dash-box time-box">
+          <span class="dash-label">남은 시간</span>
+          <span id="time-display" class="dash-value">5분 00초</span>
+        </div>
+        <div class="dash-box">
+          <span class="dash-label">맞힌 문제</span>
+          <span id="correct-display" class="dash-value">0개</span>
+        </div>
+      </div>
+
+      <!-- 문제 영역 -->
+      <div class="question-card">
+        <span id="q-category" class="question-category">덧셈</span>
+        <div id="q-text" class="question-text" style="display: none;"></div>
+        <div id="q-visual" class="question-visual" style="display: none;"></div>
+        <div id="q-math" class="question-math">3 + 4 = ?</div>
+      </div>
+
+      <!-- 입력 화면 -->
+      <div id="answer-display" class="answer-display placeholder">답을 입력하세요</div>
+
+      <!-- 피드백 메시지 -->
+      <div id="feedback-msg" class="feedback-msg"></div>
+
+      <!-- 숫자 키패드 -->
+      <div class="keypad">
+        <button class="key-btn" onclick="appendInput('1')">1</button>
+        <button class="key-btn" onclick="appendInput('2')">2</button>
+        <button class="key-btn" onclick="appendInput('3')">3</button>
+        <button class="key-btn" onclick="appendInput('4')">4</button>
+        <button class="key-btn" onclick="appendInput('5')">5</button>
+        <button class="key-btn" onclick="appendInput('6')">6</button>
+        <button class="key-btn" onclick="appendInput('7')">7</button>
+        <button class="key-btn" onclick="appendInput('8')">8</button>
+        <button class="key-btn" onclick="appendInput('9')">9</button>
+        <button class="key-btn action-clear" onclick="clearInput()">지우기</button>
+        <button class="key-btn" onclick="appendInput('0')">0</button>
+        <button class="key-btn action-submit" onclick="submitAnswer()">확인</button>
+      </div>
+    </div>
+
+    <!-- 3. 결과 화면 -->
+    <div id="result-screen" class="screen">
+      <div style="font-size: 48px; margin-top: 10px;">🏆</div>
+      <h2 class="result-title">도전 완료!</h2>
+      <div id="grade-badge" class="grade-badge">수학 마스터!</div>
+
+      <div class="result-card">
+        <div class="result-grid">
+          <div class="result-item">
+            <span class="item-label">최종 점수</span>
+            <span id="res-score" class="item-val" style="color:#0288d1;">0점</span>
+          </div>
+          <div class="result-item">
+            <span class="item-label">정답률</span>
+            <span id="res-accuracy" class="item-val" style="color:#7b1fa2;">0%</span>
+          </div>
+          <div class="result-item">
+            <span class="item-label">맞힌 문제</span>
+            <span id="res-correct" class="item-val" style="color:#2e7d32;">0개</span>
+          </div>
+          <div class="result-item">
+            <span class="item-label">틀린 문제</span>
+            <span id="res-wrong" class="item-val" style="color:#c62828;">0개</span>
+          </div>
+        </div>
+      </div>
+
+      <p id="encourage-msg" class="encourage-msg">정말 대단해요! 계속해서 멋지게 도전해 보세요!</p>
+
+      <button class="btn-main" onclick="resetToStart()">
+        <span>🔄</span> 다시 도전
+      </button>
+    </div>
+  </div>
+
+  <script>
+    /* ===================================================
+       게임 상태 변수 (제한 시간 5분 = 300초)
+    =================================================== */
+    const TOTAL_TIME = 300; // 5분
+    let score = 0;
+    let timeLeft = TOTAL_TIME;
+    let correctCount = 0;
+    let wrongCount = 0;
+    
+    let currentProblem = null;
+    let currentInput = '';
+    let lastProblemKey = ''; // 연속 중복 방지 키
+    
+    let gameTimer = null;
+    let nextQuestionTimeout = null;
+    let isProcessing = false; // 중복 제출 방지 플래그
+    let isGameRunning = false;
+
+    // 모으기/가르기용 이모지 리스트
+    const emojis = ['🍎', '⚽', '⭐', '🍬', '🐱', '🎈', '🚗', '🌸'];
+
+    // 칭찬 문구 리스트
+    const praiseMessages = ['정답이에요! 🎉', '참 잘했어요! 👏', '대단해요! ⭐', '최고예요! 👍'];
+
+    /* ===================================================
+       웹 오디오 API (효과음 생성)
+    =================================================== */
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+          audioCtx = new AudioContext();
+        }
+      }
+    }
+
+    // 정답 효과음 (밝은 피치 2음)
+    function playCorrectSound() {
+      try {
+        initAudio();
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const now = audioCtx.currentTime;
+        const osc1 = audioCtx.createOscillator();
+        const gain1 = audioCtx.createGain();
+
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(523.25, now); // C5
+        osc1.frequency.setValueAtTime(659.25, now + 0.1); // E5
+
+        gain1.gain.setValueAtTime(0.15, now);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+        osc1.connect(gain1);
+        gain1.connect(audioCtx.destination);
+
+        osc1.start(now);
+        osc1.stop(now + 0.35);
+      } catch (e) {
+        // 오디오 미지원 환경 오류 무시
+      }
+    }
+
+    // 오답 효과음 (부드러운 저음)
+    function playWrongSound() {
+      try {
+        initAudio();
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(280, now);
+        osc.frequency.setValueAtTime(220, now + 0.12);
+
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.3);
+      } catch (e) {
+        // 오디오 미지원 환경 오류 무시
+      }
+    }
+
+    /* ===================================================
+       화면 전환 함수
+    =================================================== */
+    function showScreen(screenId) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(screenId).classList.add('active');
+    }
+
+    /* ===================================================
+       게임 시작 및 초기화
+    =================================================== */
+    function startGame() {
+      initAudio();
+
+      // 변수 초기화
+      score = 0;
+      timeLeft = TOTAL_TIME;
+      correctCount = 0;
+      wrongCount = 0;
+      currentInput = '';
+      lastProblemKey = '';
+      isProcessing = false;
+      isGameRunning = true;
+
+      // 대시보드 UI 업데이트
+      updateDashboard();
+      document.getElementById('time-box').classList.remove('urgent');
+      setInputsDisabled(false);
+
+      // 화면 전환
+      showScreen('game-screen');
+
+      // 첫 문제 생성
+      generateProblem();
+
+      // 타이머 시작 (정확히 버튼 누른 시점부터 작동)
+      clearInterval(gameTimer);
+      clearTimeout(nextQuestionTimeout);
+
+      gameTimer = setInterval(() => {
+        timeLeft--;
+        updateDashboard();
+
+        // 10초 이하 경고 연출
+        if (timeLeft <= 10) {
+          document.getElementById('time-box').classList.add('urgent');
+        }
+
+        // 0초 게임 종료
+        if (timeLeft <= 0) {
+          endGame();
+        }
+      }, 1000);
+    }
+
+    function updateDashboard() {
+      document.getElementById('score-display').textContent = score + '점';
+      
+      // 분:초 단위 서식 적용 (예: 4분 59초 / 9초)
+      const minutes = Math.floor(timeLeft / 60);
+      const seconds = timeLeft % 60;
+      let timeStr = '';
+      
+      if (minutes > 0) {
+        const formattedSec = seconds < 10 ? '0' + seconds : seconds;
+        timeStr = `${minutes}분 ${formattedSec}초`;
+      } else {
+        timeStr = `${seconds}초`;
+      }
+
+      document.getElementById('time-display').textContent = timeStr;
+      document.getElementById('correct-display').textContent = correctCount + '개';
+    }
+
+    /* ===================================================
+       문제 생성 로직 (1학년 1학기: 범위 0~9, 음수 없음)
+    =================================================== */
+    function getRandomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function generateProblem() {
+      clearInput();
+      document.getElementById('feedback-msg').textContent = '';
+      document.getElementById('feedback-msg').className = 'feedback-msg';
+
+      const types = ['add', 'sub', 'combine', 'split'];
+      let prob = null;
+      let probKey = '';
+
+      // 직전 문제와 동일하지 않을 때까지 반복 생성
+      do {
+        const type = types[getRandomInt(0, types.length - 1)];
+
+        if (type === 'add') {
+          // 덧셈: A + B <= 9
+          const a = getRandomInt(0, 9);
+          const b = getRandomInt(0, 9 - a);
+          prob = {
+            category: '덧셈',
+            text: null,
+            visual: null,
+            math: `${a} + ${b} = ?`,
+            answer: a + b
+          };
+          probKey = `add_${a}_${b}`;
+
+        } else if (type === 'sub') {
+          // 뺄셈: A - B >= 0
+          const a = getRandomInt(0, 9);
+          const b = getRandomInt(0, a);
+          prob = {
+            category: '뺄셈',
+            text: null,
+            visual: null,
+            math: `${a} - ${b} = ?`,
+            answer: a - b
+          };
+          probKey = `sub_${a}_${b}`;
+
+        } else if (type === 'combine') {
+          // 모으기: A + B <= 9
+          const a = getRandomInt(1, 5);
+          const b = getRandomInt(1, 9 - a);
+          const emoji = emojis[getRandomInt(0, emojis.length - 1)];
+          const visualStr = `${emoji.repeat(a)}  &  ${emoji.repeat(b)}`;
+          
+          prob = {
+            category: '모으기',
+            text: `${emoji} ${a}개와 ${emoji} ${b}개를 모으면 모두 몇 개일까요?`,
+            visual: visualStr,
+            math: `${a}와 ${b}를 모으기`,
+            answer: a + b
+          };
+          probKey = `combine_${a}_${b}`;
+
+        } else if (type === 'split') {
+          // 가르기: A = B + ? (A <= 9)
+          const a = getRandomInt(2, 9);
+          const b = getRandomInt(1, a - 1);
+          const emoji = emojis[getRandomInt(0, emojis.length - 1)];
+          
+          prob = {
+            category: '가르기',
+            text: `${emoji} ${a}개를 ${b}개와 몇 개로 가를 수 있을까요?`,
+            visual: emoji.repeat(a),
+            math: `${a} = ${b} + ?`,
+            answer: a - b
+          };
+          probKey = `split_${a}_${b}`;
+        }
+      } while (probKey === lastProblemKey);
+
+      lastProblemKey = probKey;
+      currentProblem = prob;
+
+      // 화면에 문제 출력
+      const qCategory = document.getElementById('q-category');
+      const qText = document.getElementById('q-text');
+      const qVisual = document.getElementById('q-visual');
+      const qMath = document.getElementById('q-math');
+
+      qCategory.textContent = prob.category;
+
+      if (prob.text) {
+        qText.textContent = prob.text;
+        qText.style.display = 'block';
+      } else {
+        qText.style.display = 'none';
+      }
+
+      if (prob.visual) {
+        qVisual.innerHTML = prob.visual;
+        qVisual.style.display = 'block';
+      } else {
+        qVisual.style.display = 'none';
+      }
+
+      qMath.textContent = prob.math;
+    }
+
+    /* ===================================================
+       답안 입력 및 키패드 처리
+    =================================================== */
+    function appendInput(digit) {
+      if (isProcessing || !isGameRunning) return;
+      // 답은 0~9 범위이므로 1자리 수만 입력 받음 (새 숫자 클릭 시 교체)
+      currentInput = digit;
+      updateInputDisplay();
+    }
+
+    function clearInput() {
+      if (isProcessing || !isGameRunning) return;
+      currentInput = '';
+      updateInputDisplay();
+    }
+
+    function updateInputDisplay() {
+      const display = document.getElementById('answer-display');
+      if (currentInput === '') {
+        display.textContent = '답을 입력하세요';
+        display.classList.add('placeholder');
+      } else {
+        display.textContent = currentInput;
+        display.classList.remove('placeholder');
+      }
+    }
+
+    /* ===================================================
+       정답 제출 및 채점
+    =================================================== */
+    function submitAnswer() {
+      if (isProcessing || !isGameRunning) return;
+
+      // 미입력 시 안내
+      if (currentInput === '') {
+        const fb = document.getElementById('feedback-msg');
+        fb.textContent = '답을 입력해 주세요.';
+        fb.className = 'feedback-msg warn';
+        return;
+      }
+
+      isProcessing = true;
+      setInputsDisabled(true);
+
+      const userAnswer = parseInt(currentInput, 10);
+      const fb = document.getElementById('feedback-msg');
+
+      if (userAnswer === currentProblem.answer) {
+        // --- 정답 처리 ---
+        score += 10;
+        correctCount++;
+        updateDashboard();
+
+        const randomPraise = praiseMessages[getRandomInt(0, praiseMessages.length - 1)];
+        fb.textContent = randomPraise;
+        fb.className = 'feedback-msg correct';
+
+        // 축하 애니메이션 및 효과음
+        showCelebration();
+        playCorrectSound();
+
+        // 0.7초 후 다음 문제
+        nextQuestionTimeout = setTimeout(() => {
+          if (isGameRunning) {
+            isProcessing = false;
+            setInputsDisabled(false);
+            generateProblem();
+          }
+        }, 700);
+
+      } else {
+        // --- 오답 처리 ---
+        wrongCount++;
+        updateDashboard();
+
+        fb.textContent = `아쉬워요. 정답은 ${currentProblem.answer}예요.`;
+        fb.className = 'feedback-msg wrong';
+
+        playWrongSound();
+
+        // 1.2초 동안 정답을 보여준 후 다음 문제
+        nextQuestionTimeout = setTimeout(() => {
+          if (isGameRunning) {
+            isProcessing = false;
+            setInputsDisabled(false);
+            generateProblem();
+          }
+        }, 1200);
+      }
+    }
+
+    // 입력 버튼 비활성화 (피드백 출력 중 중복 클릭 방지)
+    function setInputsDisabled(disabled) {
+      document.querySelectorAll('.keypad .key-btn').forEach(btn => {
+        btn.disabled = disabled;
+      });
+    }
+
+    // 별 이펙트 애니메이션
+    function showCelebration() {
+      const cel = document.getElementById('celebration');
+      cel.style.display = 'flex';
+      setTimeout(() => {
+        cel.style.display = 'none';
+      }, 600);
+    }
+
+    /* ===================================================
+       키보드 입력 지원 (PC 환경)
+    =================================================== */
+    window.addEventListener('keydown', (e) => {
+      if (!isGameRunning || isProcessing) return;
+
+      if (e.key >= '0' && e.key <= '9') {
+        appendInput(e.key);
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        clearInput();
+      } else if (e.key === 'Enter') {
+        submitAnswer();
+      }
+    });
+
+    /* ===================================================
+       게임 종료 및 결과 화면
+    =================================================== */
+    function endGame() {
+      isGameRunning = false;
+      isProcessing = true;
+      clearInterval(gameTimer);
+      clearTimeout(nextQuestionTimeout);
+
+      setInputsDisabled(true);
+
+      // 결과 계산
+      const totalSolved = correctCount + wrongCount;
+      const accuracy = totalSolved > 0 ? Math.round((correctCount / totalSolved) * 100) : 0;
+
+      // 5분 게임 기준 등급 산정 (500점 이상, 300점 이상, 150점 이상)
+      let grade = '';
+      let encourage = '';
+
+      if (score >= 500) {
+        grade = '수학 마스터! 👑';
+        encourage = '엄청난 수학 실력이에요! 당신은 최고의 수학 마스터!';
+      } else if (score >= 300) {
+        grade = '멋진 계산왕! ⭐';
+        encourage = '정말 잘했어요! 모으기와 가르기도 척척 해내는군요!';
+      } else if (score >= 150) {
+        grade = '쑥쑥 성장왕! 🌱';
+        encourage = '차근차근 실력이 늘고 있어요! 조금만 더 도전해 봐요!';
+      } else {
+        grade = '용기 있는 도전왕! 👍';
+        encourage = '끝까지 포기하지 않고 도전한 모습이 정말 멋져요!';
+      }
+
+      // 결과 화면 데이터 반영
+      document.getElementById('res-score').textContent = score + '점';
+      document.getElementById('res-accuracy').textContent = accuracy + '%';
+      document.getElementById('res-correct').textContent = correctCount + '개';
+      document.getElementById('res-wrong').textContent = wrongCount + '개';
+      document.getElementById('grade-badge').textContent = grade;
+      document.getElementById('encourage-msg').textContent = encourage;
+
+      // 결과 화면으로 전환
+      showScreen('result-screen');
+    }
+
+    /* ===================================================
+       다시 도전 (시작 화면으로 이동 및 전체 초기화)
+    =================================================== */
+    function resetToStart() {
+      clearInterval(gameTimer);
+      clearTimeout(nextQuestionTimeout);
+
+      score = 0;
+      timeLeft = TOTAL_TIME;
+      correctCount = 0;
+      wrongCount = 0;
+      currentInput = '';
+      isProcessing = false;
+      isGameRunning = false;
+
+      clearInput();
+      document.getElementById('feedback-msg').textContent = '';
+
+      showScreen('start-screen');
+    }
+  </script>
+</body>
+</html>
