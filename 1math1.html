@@ -598,18 +598,22 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      flex: 1;
+      min-width: 0;
     }
 
     .rank-num {
-      width: 32px;
+      flex: 0 0 62px;
       font-weight: 900;
       text-align: center;
       color: #37474f;
+      white-space: nowrap;
     }
 
     .rank-name {
       color: #263238;
       max-width: 140px;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -618,6 +622,8 @@
     .rank-score {
       font-weight: 900;
       color: #2e7d32;
+      flex-shrink: 0;
+      white-space: nowrap;
     }
 
     .leaderboard-empty {
@@ -690,6 +696,25 @@
       background-color: #f5f5f5;
       border: 2px solid #e0e0e0;
       transition: transform 0.2s ease;
+    }
+
+    .tv-rank-badge {
+      flex: 0 0 110px;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .tv-rank-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tv-rank-score {
+      color: #2e7d32;
+      flex-shrink: 0;
+      white-space: nowrap;
     }
 
     .tv-item.rank-1 {
@@ -997,10 +1022,10 @@
           html += `
             <li class="tv-item ${rankClass}">
               <div class="rank-info">
-                <span style="width: 100px; text-align: left;">${rankBadge}</span>
-                <span>${nameSafe}</span>
+                <span class="tv-rank-badge">${rankBadge}</span>
+                <span class="tv-rank-name">${nameSafe}</span>
               </div>
-              <span style="color:#2e7d32;">${scoreVal}점</span>
+              <span class="tv-rank-score">${scoreVal}점</span>
             </li>
           `;
         } else {
