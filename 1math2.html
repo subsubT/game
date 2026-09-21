@@ -96,16 +96,8 @@
   <div id="celebration" class="celebration" aria-hidden="true"></div>
   <script>
   (()=>{"use strict";
-    const firebaseConfig = {
-      apiKey: "AIzaSyApy0aEsQzRn-CnGVV87z11wUa7RpJ9MZo",
-      authDomain: "math-game-b22f3.firebaseapp.com",
-      databaseURL: "https://math-game-b22f3-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "math-game-b22f3",
-      storageBucket: "math-game-b22f3.firebasestorage.app",
-      messagingSenderId: "273621053775",
-      appId: "1:273621053775:web:c98332e9c73157c2c2553a",
-      measurementId: "G-HR8RJ8NL3V"
-    };
+    let firebaseConfig=null;
+    async function loadFirebaseConfig(){const response=await fetch("/api/firebase-config",{cache:"no-store"});if(!response.ok)throw new Error("Firebase 설정을 불러오지 못했습니다.");const config=await response.json();if(!config.apiKey||!config.databaseURL||!config.projectId||!config.appId)throw new Error("Firebase 설정이 완전하지 않습니다.");return config;}
     const SCORE_PATH="/games/1math2/scores";
     const GAME_MS=5*60*1000;
     const $=id=>document.getElementById(id);
@@ -145,7 +137,7 @@
     function localSave(payload){try{const key="number100_local_results";const old=JSON.parse(localStorage.getItem(key)||"[]");old.push({...payload,time:Date.now(),createdAt:Date.now()});localStorage.setItem(key,JSON.stringify(old.slice(-50)));}catch(e){console.error("로컬 결과 저장 실패:",e);}}
     async function saveResult(){if(state.saveStarted||state.sessionSaved)return;state.saveStarted=true;const token=state.sessionToken,localPayload=resultPayload();if(!state.firebaseReady||!state.scoreRef){localSave(localPayload);if(token===state.sessionToken)$("saveMessage").textContent="온라인 결과 전송이 되지 않았어요. 선생님께 알려 주세요.";return;}try{await state.scoreRef.push(firebaseScorePayload());if(token===state.sessionToken){state.sessionSaved=true;$("saveMessage").textContent="순위표에 점수를 저장했어요!";}}catch(e){localSave(localPayload);if(token===state.sessionToken)$("saveMessage").textContent="온라인 결과 전송이 되지 않았어요. 선생님께 알려 주세요.";console.error("Firebase 점수 저장 실패:",e);}}
     function retry(){resetGame();$("saveMessage").textContent="";showScreen("start");$("nickname").focus();}
-    function initFirebase(){try{if(!window.firebase?.initializeApp)throw new Error("Firebase CDN을 불러오지 못했습니다.");if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);state.scoreRef=firebase.database().ref(SCORE_PATH);state.firebaseReady=true;state.scoreRef.on("value",snap=>{const data=[];snap.forEach(child=>{const v=child.val();if(v&&typeof v==="object")data.push(sanitizeRecord(child.key,v));});state.leaderData=data.filter(Boolean);renderAllLeaderboards();if(boardMode){renderBoard();setBoardStatus("실시간으로 연결되었어요.",false);}},error=>{state.firebaseReady=false;showConnectionError(error);});}catch(e){state.firebaseReady=false;showConnectionError(e);}}
+    async function initFirebase(){try{firebaseConfig=await loadFirebaseConfig();if(!window.firebase?.initializeApp)throw new Error("Firebase CDN을 불러오지 못했습니다.");if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);state.scoreRef=firebase.database().ref(SCORE_PATH);state.firebaseReady=true;state.scoreRef.on("value",snap=>{const data=[];snap.forEach(child=>{const v=child.val();if(v&&typeof v==="object")data.push(sanitizeRecord(child.key,v));});state.leaderData=data.filter(Boolean);renderAllLeaderboards();if(boardMode){renderBoard();setBoardStatus("실시간으로 연결되었어요.",false);}},error=>{state.firebaseReady=false;showConnectionError(error);});}catch(e){state.firebaseReady=false;showConnectionError(e);}}
     function sanitizeRecord(key,v){const score=Number(v.score),time=Number(v.time??v.createdAt??0);if(!Number.isFinite(score))return null;const name=String(v.name??v.nickname??"이름 없음").trim().slice(0,24)||"이름 없음";const correct=Number(v.correct??v.correctCount??0),wrong=Number(v.wrong??v.wrongCount??0),total=Number(v.totalQuestions??(correct+wrong));return{key,name,score,correct:Number.isFinite(correct)?correct:0,wrong:Number.isFinite(wrong)?wrong:0,time:Number.isFinite(time)?time:0,total:Number.isFinite(total)?total:0,accuracy:Number.isFinite(Number(v.accuracy))?Number(v.accuracy):(total?Math.round(correct/total*100):0),duration:Number(v.durationSeconds)||0,endReason:String(v.endReason||"-"),wrongAnswers:Array.isArray(v.wrongAnswers)?v.wrongAnswers:[]};}
     function ranked(){return state.leaderData.slice().sort((a,b)=>b.score-a.score||a.time-b.time||a.key.localeCompare(b.key)).slice(0,10);}
     function renderLeaderboard(node){if(!node)return;node.replaceChildren();const rows=ranked();if(!rows.length){const li=document.createElement("li");li.className="empty";li.textContent="아직 기록이 없어요. 첫 번째 탐험가가 되어 보세요!";node.append(li);return;}rows.forEach((r,i)=>{const li=document.createElement("li");li.className="leader-row"+(i===0?" first":"");const rank=document.createElement("span"),name=document.createElement("span"),score=document.createElement("span");rank.className="rank";rank.textContent=i===0?"👑 1":String(i+1);name.className="leader-name";name.textContent=r.name;name.title=r.name;score.className="leader-score";score.textContent=r.score+"점";li.append(rank,name,score);node.append(li);});}
