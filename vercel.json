@@ -29,7 +29,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'sha256-DZFWAmcSUaCJrW3GImMCMP5gU75HwWILpJuJALvKC1U=' https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+          "value": "default-src 'self'; script-src 'self' 'sha256-DZFWAmcSUaCJrW3GImMCMP5gU75HwWILpJuJALvKC1U=' 'sha256-JKH9kKlCRkdjZmn1kBMgG6OF7/gqWPiMdqfUANTXETk=' 'sha256-J047Aae4bcUkQfnQmAunZbffbl7/bi0Fpa5imAFA7Kg='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
         },
         {
           "key": "Access-Control-Allow-Origin",
