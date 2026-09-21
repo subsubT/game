@@ -17,5 +17,7 @@ module.exports = function firebaseConfig(request, response) {
   }
 
   response.setHeader("Cache-Control", "no-store");
+  response.setHeader("Access-Control-Allow-Origin", "https://1math2-subsub-tschool.vercel.app");
+  response.setHeader("Vary", "Origin");
   response.status(200).json(config);
 };
