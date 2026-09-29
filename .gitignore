@@ -1,0 +1,15 @@
+node_modules/
+.pnpm-store/
+functions/node_modules/
+functions/.env*
+.dev.vars*
+.env*
+firebase-config.js
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase/
+.firebase-local-config/
+.wrangler/
+tools/temurin21.zip
+tools/temurin21/

@@ -1,0 +1,23 @@
+{
+  "name": "1math3-student-game",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/1math3-core.test.js tests/1math3-browser-bundle.test.js tests/worker-auth.test.js",
+    "build:student": "node tools/build-1math3.mjs",
+    "build:functions": "node tools/build-functions.mjs",
+    "build:worker": "node tools/build-worker.mjs",
+    "check:worker": "node tools/build-worker.mjs --check && wrangler deploy --dry-run",
+    "serve:student": "node tools/serve-static.mjs",
+    "emulators:test": "node tools/run-emulator-tests.mjs",
+    "emulators:browser": "node tools/run-emulator-tests.mjs tests/firebase-browser.test.js",
+    "emulators:worker": "node tools/run-emulator-tests.mjs tests/worker-emulator.test.js"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase": "^12.19.0",
+    "firebase-tools": "^14.17.0",
+    "playwright": "^1.63.0",
+    "wrangler": "^4.138.0"
+  }
+}

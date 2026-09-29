@@ -1,0 +1,7 @@
+packages:
+  - functions
+allowBuilds:
+  esbuild: true
+  protobufjs: false
+  re2: false
+  workerd: true
