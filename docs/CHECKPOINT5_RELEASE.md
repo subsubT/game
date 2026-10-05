@@ -4,6 +4,8 @@
 
 ## 개발 Worker 실제 연결
 
+현재 사용 경로: 일반 Chrome → `math3-dev` Hosting preview `cp5-google` → 기존 Worker callback → 고정 preview 대시보드. URL `https://math3-dev--cp5-google-q3ym6qkw.web.app/game/teacher/index.html`, 활성 Worker `25746fa1-a486-44e7-b34d-165ea5dea87a`. preview는 1일 만료이며 Google 로그인 보호를 우회하지 않는다. 개발 재게시 명령은 `node tools/build-cp5-preview.mjs` 후 `npx firebase hosting:channel:deploy 'cp5-google' --project 'math3-dev' --config 'firebase.cp5-preview.json' --expires '1d' --non-interactive`이다. Hosting live/Pages/production을 배포하는 명령과 구분한다. 기존 도메인 목록/Worker 설정 백업은 `.cp5-test-artifacts/`에 보관한다. 종료 후 이 preview의 Origin만 정리하고 기존 도메인·deny 규칙은 보존한다. 실제 Google 개발 PASS 후에 최종 Pages 공개 절차를 진행한다.
+
 1. GitHub `subsubT/game`, Firebase `math3-dev`, Worker `math3-cp3-dev`를 현재 조회와 설정에서 대조한다. 사용자 로그인/Console 동의는 사용자에게 맡기고 Secret 값은 출력하지 않는다.
 2. `versions list`/`deployments list`의 메타데이터로 실제 버전을 대조한다. `versions secret list --latest-version` 성공을 게이트로 사용하지 않는다. Secret 값은 조회하지 않고 실제 인증된 `getGoogleConnectionStatus`와 OAuth 시작으로 존재/형식/동작을 확인한다. staged Secret 적용은 `wrangler versions deploy '<조회한 실제 버전 ID>@100%' --name 'math3-cp3-dev' --yes`를 사용한다. Secret 준비 버전과 CP5 코드 배포를 구분해 기록한다.
 3. 배포 전 기존 Worker 활성 버전·설정·cron을 읽기 전용으로 기록한다. Firestore의 변경 대상 Google 연결/export/job/teacher 메타데이터는 복원 가능하게 **서버 전용 비공개 저장소**에 백업하고 버전·환경을 기록한다. token/복구 키/학생 자료를 공개 저장소나 Pages에 넣지 않는다. 이번에는 기존 Rules/학생 성적 스키마를 변경하지 않는다.

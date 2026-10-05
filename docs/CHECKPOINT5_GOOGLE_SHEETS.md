@@ -4,6 +4,10 @@
 
 ## 실제 재개 결과 — 2026-10-05 13:32 KST
 
+**이후 로그인 경로 수정:** 자동화 Chrome의 Google 로그인 차단을 사용자 화면에서 확인했다. 정상 일반 Chrome용 `math3-dev` Hosting preview `cp5-google`을 준비했다(1일 만료): https://math3-dev--cp5-google-q3ym6qkw.web.app/game/teacher/index.html . 실제 신규 활성 Worker는 `25746fa1-a486-44e7-b34d-165ea5dea87a`. 기존 Worker callback/Secret/Firestore Rules는 유지하고 이 정확한 preview Origin·고정 복귀 URL만 설정했다. authorized domains 변경 전 메타데이터와 Worker 설정은 비공개로 백업했다. 일반 Chrome의 정상 Google 계정 선택 화면까지 확인했으며 사용자 승인을 기다린다. 이전 자동화 fixture는 보존하고 새 익명 `CP5일반검증반`의 연결 전후 보존을 검증한다. Google 보호 우회/자동화 식별 숨김은 하지 않았다. 아래 표는 이전 배포 이력을 포함한다.
+
+preview에는 UI allowlist·공개용 Firebase web config만 포함한다. `worker/`, `.env.local`, `docs/`, Hosting 설정 경로 404; 교사/학생 파일 200·noindex·CORS PASS. `tools/cp5-live-integration.mjs`에서 Google 로그인 자동화를 제거해 HTTP 검사로 바꿨다. 도름스체크 detect/init/scan 결과는 확인 30/미확인 5/해당 없음 1이며 권고를 참고 기록했다. 최종 Pages/production 공개 검증 및 실제 Workspace/Drive/Sheets PASS와 구분한다.
+
 | 항목 | 실행 근거 / 결과 |
 |---|---|
 | staged Secret 버전 적용 | `6c8116f8-99b6-4a32-92e5-6b67785b5d3c` 100% 적용 후 CP5 코드 배포 |

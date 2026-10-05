@@ -4,6 +4,8 @@
 
 사용자가 Drive/Sheets API, External/Testing·Test user, openid/drive.file, 고정 callback Web client, Firebase Google provider/허용 도메인, 세 Secret 등록 완료를 확인했다. Wrangler 4.138.0·4.147.0의 `versions secret list --latest-version` 오류를 배포 게이트로 사용하지 않았다. 활성 `wrangler secret list`는 이름만 검사했으며 실제 인증된 Worker에서 준비 여부를 확인했다.
 
+자동화 Chrome의 Google 로그인 차단을 확인해 **일반 Chrome + Firebase 개발 preview**로 바꿨다. 주소: `https://math3-dev--cp5-google-q3ym6qkw.web.app/game/teacher/index.html` (1일 만료, site `math3-dev`, channel `cp5-google`). Firebase CLI의 preview authorized domain 등록 전 기존 도메인 목록을 비공개 백업했다. Worker callback과 Google Web client 설정은 그대로이고, Worker 고정 복귀 URL만 이 preview로 변경했다. 추가 수동 Console 작업은 필요 없다. 열린 일반 Chrome에서 Console에 등록한 Test user 계정을 선택·승인한다. GitHub Pages 최종 공개와 production은 변경하지 않았다.
+
 등록된 암호화 키는 서버의 32바이트 형식 검사에 실패했다. 값을 읽지 않고 오류 코드로 진단했고, 새 무작위 32바이트 개발 키를 stdin으로 등록했다(값 출력/파일 저장 없음). 이전 설정은 Worker `4bf2f5df-3e99-4563-9fc7-87e7fd5de22e`에 보존된다. 현재 `84d284a2-9508-4fac-8822-6b3f53660231`에서 `configured:true` 확인. Client ID/Secret은 바꾸지 않았다. 키 등록 도우미를 다시 실행하거나 기존 키로 덮어쓰지 않는다. 최신 Secret 목록 실패 시 도우미는 안전하게 중단하며 이 계정에서 그 성공을 전제로 진행하지 않는다.
 
 ## 1. 현재 프로젝트 식별

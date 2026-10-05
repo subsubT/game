@@ -4,6 +4,12 @@
 
 ## 현재 진행: Checkpoint 5 개발 Worker 배포·회귀 PASS — 실제 Google 승인 대기
 
+2026-10-05 재개 경로 수정: 사용자가 자동화 Chrome에서 Google의 ‘브라우저 또는 앱이 안전하지 않을 수 있습니다’ 차단을 확인했다. Google 보호를 우회하거나 자동화 식별을 숨기지 않았다. 기존 자동화 검증 브라우저를 종료하고, `math3-dev` Hosting의 1일 만료 preview `cp5-google`을 일반 Chrome에서 열었다. 실제 주소는 `https://math3-dev--cp5-google-q3ym6qkw.web.app/game/teacher/index.html`. Firebase CLI가 preview Origin을 authorized domains에 추가하기 전 목록을 비공개 `.cp5-test-artifacts/auth-domains-before-preview.json`에 백업했다. Worker URL 설정도 백업했다. 새로운 production 프로젝트/Hosting live 채널/Pages는 만들거나 배포하지 않았다.
+
+현재 개발 Worker `25746fa1-a486-44e7-b34d-165ea5dea87a`는 원래 Pages Origin과 이 정확한 preview Origin만 허용하고, Google callback은 기존 Worker 주소 그대로이며 복귀 URL만 preview의 고정 `/game/teacher/index.html`이다. 임의 returnUrl은 계속 거부한다. UI·공개 Firebase web config만 명시한 allowlist로 게시했으며 서버/문서/환경 파일 HTTP 404, 핵심 화면 HTTP 200·noindex·CORS 확인 PASS. 이전 자동화 fixture는 삭제/이전하지 않았다. 일반 Chrome에서 새 익명 테스트 교사·`CP5일반검증반`을 만들고 로그인 전 uid/teacherId/학급 기준을 브라우저에 기록했다. 정상 Google **계정 선택 화면**에서 사용자 승인을 기다린다. 이 fixture로 연결 전후 보존을 검증한다. 로그인 차단 때문에 이전 승인 대기는 완료되지 않았으며 Workspace 실연결 PASS는 여전히 아니다.
+
+도름스체크 v0.3.1 detect/init/security scan 실행: 확인 30, 미확인 5, 해당 없음 1. 보고된 항목은 권고(보안 헤더/정책 페이지/기존 코드 검토 등)이며 접근 권한·Secrets를 보증하지 않는다. 실제 Firestore 거부 검사는 이전 API 회귀 근거와 별도로 유지한다. 동적 보고서/설정은 Git 제외했다. `tools/cp5-live-integration.mjs`는 이제 공개 preview HTTP/CORS 점검만 하며 Google 로그인 자동화는 제거했다.
+
 2026-10-05 13:32 KST: 사용자 수동 Google/Firebase 설정 완료 후 CP5를 실제 개발 트래픽에 적용했다. 활성 버전 `84d284a2-9508-4fac-8822-6b3f53660231`, 5분 cron 유지. 실제 인증된 `getGoogleConnectionStatus`의 `configured:true`, `configurationError:null`을 확인했다. `versions secret list --latest-version` 오류는 배포 게이트로 사용하지 않았다.
 
 등록된 암호화 키가 서버의 32바이트 형식 검사를 만족하지 않아 OAuth가 차단됐다. 값을 읽지 않고 오류 코드로 진단했다. canonical Base64URL/Base64/hex 지원을 추가·검사했지만 계속 실패하여 새 무작위 32바이트 개발 키를 stdin으로 등록했다(값 출력/파일 저장 없음). 이전 설정은 Worker `4bf2f5df-3e99-4563-9fc7-87e7fd5de22e`에 보존했다. 성공한 OAuth 연결 생성 전 수정이며 Google Client ID/Secret은 유지했다.

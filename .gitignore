@@ -18,3 +18,5 @@ client_secret*.json
 *service-account*.json
 *firebase-adminsdk*.json
 .cp5-test-artifacts/
+.dorms-check/
+dorms-check.config.json
