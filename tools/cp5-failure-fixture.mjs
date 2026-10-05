@@ -20,6 +20,16 @@ if(mode==='fail'){
  await writeFile(backup,JSON.stringify({spreadsheetId:e.fields.spreadsheetId.stringValue,ledgerHash:digest(ledger)},null,2));
  await api.patch(exp+'?updateMask.fieldPaths=spreadsheetId',{fields:{spreadsheetId:{stringValue:'cp5_nonexistent_test_sheet'}}});
  console.log('Test fixture backup saved; reversible Google 404 fault enabled');
+}else if(mode==='queue'){
+ const original=(await api.get(exp+'?mask.fieldPaths=lastSyncedAt')).body;
+ await writeFile('.cp5-test-artifacts/scheduled-baseline.json',JSON.stringify({lastSyncedAt:original.fields.lastSyncedAt?.stringValue}));
+ await api.patch(base+'/sheetJobs/'+classId+'?currentDocument.exists=false',{fields:{state:{stringValue:'pending'},dirty:{stringValue:crypto.randomUUID()},nextRunAt:{integerValue:'0'}}});
+ console.log('Test export queued for the next scheduled Worker; no manual sync requested');
+}else if(mode==='scheduled-check'){
+ const before=JSON.parse(await readFile('.cp5-test-artifacts/scheduled-baseline.json','utf8'));
+ const after=(await api.get(exp+'?mask.fieldPaths=status&mask.fieldPaths=lastSyncedAt&mask.fieldPaths=errorCode')).body;
+ const job=await api.get(base+'/sheetJobs/'+classId+'?mask.fieldPaths=state&mask.fieldPaths=nextRunAt',{resolveOnHTTPError:true});
+ console.log(JSON.stringify({status:after.fields.status?.stringValue,lastSyncedAt:after.fields.lastSyncedAt?.stringValue,advanced:after.fields.lastSyncedAt?.stringValue!==before.lastSyncedAt,jobRemoved:job.status===404,errorCode:after.fields.errorCode?.stringValue}));
 }else if(mode==='checkpoint'){
  const b=JSON.parse(await readFile(backup,'utf8'));b.ledgerHash=digest((await api.get(session)).body);await writeFile(backup,JSON.stringify(b,null,2));console.log('Canonical ledger baseline recorded before explicit Google error request');
 }else if(mode==='restore'){

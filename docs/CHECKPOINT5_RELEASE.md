@@ -1,6 +1,6 @@
 # Checkpoint 5 후반 개발 검증·운영 배포·복구 절차
 
-2026-10-05. **실제 OAuth·Drive 생성·Sheets 데이터·오류 격리 검증 완료; 해제/재승인 최종 검사 중.** 최신 활성 Worker `9e886193-a20c-4817-9139-43329cb6c07d`의 결과는 [실제 검증 기록](CHECKPOINT5_LIVE_EVIDENCE.md)에 기록했다. 아래 기존 버전/승인 대기는 이력이며 최종 production/Pages 단계는 실행하지 않았다.
+2026-10-05. **실제 Google 개발 통합 PASS; 운영 설정과 실제 Pages 전체 통합 조건 남음.** 최신 활성 Worker `e9bc9633-db9c-457e-aeb6-cbc68f02664d`에서 해제/revoke·재승인·같은 파일 복원·별도 cron까지 확인했다. [실제 검증 기록](CHECKPOINT5_LIVE_EVIDENCE.md)과 [Pages 빌드/workflow 준비](CHECKPOINT5_PAGES_PREPARATION.md)를 참조한다. 아래 기존 버전/승인 대기는 이력이며 최종 production/Pages 단계는 실행하지 않았다.
 
 ## 개발 Worker 실제 연결
 

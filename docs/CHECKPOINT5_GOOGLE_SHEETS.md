@@ -1,6 +1,6 @@
 # Checkpoint 5 — 선택형 Google Sheets 구현·검증
 
-2026-10-05. **현재 판정: 실제 OAuth·암호화 저장·Drive/Sheets 생성·실제 100문항·중복 방지·오류 격리 PASS. 실제 해제/재승인 최종 검사 중; CP5 최종 PASS 아님.** 최신 근거는 [실제 개발 통합 검증](CHECKPOINT5_LIVE_EVIDENCE.md)이다. 아래 승인 대기 내용은 이전 이력이다. Pages/production 미게시.
+2026-10-05. **현재 판정: 실제 Google 개발 통합 PASS. 해제/revoke·재승인 후 같은 파일/100문항 복원·별도 cron까지 확인했다. CP5 전체 최종 PASS는 운영 Pages 전체 통합 전까지 보류한다.** 최신 근거는 [실제 개발 통합 검증](CHECKPOINT5_LIVE_EVIDENCE.md)과 [Pages 준비](CHECKPOINT5_PAGES_PREPARATION.md)이다. 아래 승인 대기 내용은 이전 이력이다. Pages/production 미게시.
 
 ## 실제 재개 결과 — 2026-10-05 13:32 KST
 

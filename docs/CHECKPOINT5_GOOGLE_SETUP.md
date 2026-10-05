@@ -1,6 +1,6 @@
 # Checkpoint 5 — 사용자가 직접 할 Google 개발 설정
 
-2026-10-05. **수동 설정 및 실제 Google 승인 완료. 실제 Drive 생성·Sheets 데이터 동기화 PASS.** 최신 Worker `9e886193-a20c-4817-9139-43329cb6c07d`의 근거는 [실제 검증 기록](CHECKPOINT5_LIVE_EVIDENCE.md)에 있다. 실제 연결 해제/재승인 최종 검사 중이다. 아래 절차는 설정 이력이며 다시 실행하지 않는다. 개발 Firebase/Worker를 운영으로 승격하지 않는다. Secret 값이나 OAuth JSON을 채팅에 보내지 않는다.
+2026-10-05. **실제 Google 개발 통합 PASS. 실제 연결 해제/revoke·재승인·같은 파일 복원까지 완료했다.** 최신 Worker `e9bc9633-db9c-457e-aeb6-cbc68f02664d`의 근거는 [실제 검증 기록](CHECKPOINT5_LIVE_EVIDENCE.md)에 있다. [운영 Pages 설정 조건](CHECKPOINT5_PAGES_PREPARATION.md)은 남았다. 아래 절차는 설정 이력이며 다시 실행하지 않는다. 개발 Firebase/Worker를 운영으로 승격하지 않는다. Secret 값이나 OAuth JSON을 채팅에 보내지 않는다.
 
 사용자가 Drive/Sheets API, External/Testing·Test user, openid/drive.file, 고정 callback Web client, Firebase Google provider/허용 도메인, 세 Secret 등록 완료를 확인했다. Wrangler 4.138.0·4.147.0의 `versions secret list --latest-version` 오류를 배포 게이트로 사용하지 않았다. 활성 `wrangler secret list`는 이름만 검사했으며 실제 인증된 Worker에서 준비 여부를 확인했다.
 

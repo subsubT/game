@@ -2,7 +2,9 @@
 
 기준일: 2026-09-27 · 변경 계약 반영: 2026-09-23
 
-## 현재 진행: Checkpoint 5 실제 OAuth·Drive 생성·Sheets 데이터·오류 격리 PASS — 해제/재승인 최종 검사 중
+## 현재 진행: Checkpoint 5 실제 Google 개발 통합 PASS — 운영 설정·Pages 전체 통합 조건 남음
+
+2026-10-05 최종 재개: 사용자의 새 승인 후 같은 교사·학급·Drive 파일과 2회차/100문항을 실제 복원했다. 실제 해제/revoke와 재승인, 별도 5분 cron 실행도 PASS. 아래 ‘승인 대기/검사 중’ 문구는 과거 이력이다. 현재 Worker `e9bc9633-db9c-457e-aeb6-cbc68f02664d`. 실제 기존 Pages는 index/1math1/1math2 200, 1math3/teacher 404. 11개 public 파일만 포함하는 Pages 빌드와 수동 workflow를 준비했고 운영 설정 누락/개발 승격은 거부한다. 운영 리소스 생성·Pages 설정 변경·게시 없이 사용자 금지 지시를 유지했다. 자세한 결과는 [Google 실검증](CHECKPOINT5_LIVE_EVIDENCE.md)과 [Pages 준비](CHECKPOINT5_PAGES_PREPARATION.md)이다. CP5 전체 최종 PASS는 운영 Pages 전체 통합 검증 전까지 보류한다.
 
 2026-10-05 19:09 KST: 재승인 요청이 18:14:36에 만료된 사실을 확인했다. 새 Worker `e9bc9633-db9c-457e-aeb6-cbc68f02664d`에서 만료/재사용 브라우저 오류를 고정 대시보드 복귀와 새 연결 안내로 수정했다. state/cookie 보안 검사는 유지하고 Secret은 변경하지 않았다. 실제 만료 callback 복구, 단위 47개·Sheets Chromium PASS. 새 요청의 사용자 승인 후 같은 파일 복원은 아직 남았다.
 
