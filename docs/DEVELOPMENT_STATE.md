@@ -4,6 +4,8 @@
 
 ## 현재 진행: Checkpoint 5 개발 Worker 배포·회귀 PASS — 실제 Google 승인 대기
 
+최신 재개: 사용자가 Google 계정 로그인 완료를 알렸다. 일반 Chrome의 현재 대시보드는 아직 `연결 안 됨`이며 익명 기준 기록 상태였다. 앱 연결을 재개하자 Google의 `math3-dev.firebaseapp.com 서비스로 로그인` 승인 화면과 `취소`/`계속` 버튼을 확인했다. 계정 로그인과 Firebase 앱 로그인 승인은 구분한다. 현재 필요한 사용자 동작은 열린 Google 창의 `계속`이다. 앱 승인/Worker Workspace 동의가 완료되기 전 uid 보존·token 교환·Sheets 생성 PASS를 선언하지 않는다. 이전 대기 탭 대신 현재 대시보드/승인 창을 다음 턴까지 유지했다.
+
 2026-10-05 재개 경로 수정: 사용자가 자동화 Chrome에서 Google의 ‘브라우저 또는 앱이 안전하지 않을 수 있습니다’ 차단을 확인했다. Google 보호를 우회하거나 자동화 식별을 숨기지 않았다. 기존 자동화 검증 브라우저를 종료하고, `math3-dev` Hosting의 1일 만료 preview `cp5-google`을 일반 Chrome에서 열었다. 실제 주소는 `https://math3-dev--cp5-google-q3ym6qkw.web.app/game/teacher/index.html`. Firebase CLI가 preview Origin을 authorized domains에 추가하기 전 목록을 비공개 `.cp5-test-artifacts/auth-domains-before-preview.json`에 백업했다. Worker URL 설정도 백업했다. 새로운 production 프로젝트/Hosting live 채널/Pages는 만들거나 배포하지 않았다.
 
 현재 개발 Worker `25746fa1-a486-44e7-b34d-165ea5dea87a`는 원래 Pages Origin과 이 정확한 preview Origin만 허용하고, Google callback은 기존 Worker 주소 그대로이며 복귀 URL만 preview의 고정 `/game/teacher/index.html`이다. 임의 returnUrl은 계속 거부한다. UI·공개 Firebase web config만 명시한 allowlist로 게시했으며 서버/문서/환경 파일 HTTP 404, 핵심 화면 HTTP 200·noindex·CORS 확인 PASS. 이전 자동화 fixture는 삭제/이전하지 않았다. 일반 Chrome에서 새 익명 테스트 교사·`CP5일반검증반`을 만들고 로그인 전 uid/teacherId/학급 기준을 브라우저에 기록했다. 정상 Google **계정 선택 화면**에서 사용자 승인을 기다린다. 이 fixture로 연결 전후 보존을 검증한다. 로그인 차단 때문에 이전 승인 대기는 완료되지 않았으며 Workspace 실연결 PASS는 여전히 아니다.
