@@ -18,6 +18,15 @@ test('native fetch is invoked without the adapter receiver in OAuth and schedule
   const google=new GoogleApi(fixtureEnv(),strictFetch);
   assert.equal((await google.refresh('test-only')).expires_in,3600);
 });
+test('expired browser OAuth returns only to the fixed dashboard while JSON clients remain rejected',async()=>{
+  const f=fixture(),l=await launch(f);f.advance(600001);
+  const expired=l.request('expired-test-code'),deps={...f.deps,database:f.db};
+  const json=await handleRequest(expired,f.env,deps);assert.equal(json.status,400);assert.equal((await json.json()).error.code,'OAUTH_STATE_INVALID');
+  const browser=new Request(expired.url+'&returnUrl=https://attacker.invalid/',{headers:{...Object.fromEntries(expired.headers),accept:'text/html'}});
+  const result=await handleRequest(browser,f.env,deps);assert.equal(result.status,303);assert.equal(result.headers.get('location'),f.env.GOOGLE_DASHBOARD_URL+'#sheets=OAUTH_STATE_INVALID');
+  assert.equal(f.google.exchanged,undefined);assert.equal(f.db.rows.has(`sheetConnections/${tid}`),false);
+  const invalidConfig=await handleRequest(browser,{...f.env,GOOGLE_DASHBOARD_URL:'https://attacker.invalid/'},deps);assert.notEqual(invalidConfig.status,303);
+});
 function fixture(){
   const db=new MemoryDb(),env=fixtureEnv(),google=new FakeGoogle();let time=Date.now();
   db.rows.set(`teachers/${tid}`,{status:'active',authEpoch:1});db.rows.set('teacherBindings/teacher-a',{teacherId:tid,epoch:1,active:true});

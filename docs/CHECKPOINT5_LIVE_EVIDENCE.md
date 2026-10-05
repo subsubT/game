@@ -1,6 +1,8 @@
 # Checkpoint 5 실제 Google 개발 통합 검증
 
-2026-10-05. 대상은 Firebase `math3-dev`, Worker `math3-cp3-dev`, 저장소 `https://github.com/subsubT/game.git`이다. 운영 환경을 생성하거나 개발 환경을 승격하지 않았다. 현재 Worker는 `9e886193-a20c-4817-9139-43329cb6c07d`이며 5분 cron을 유지한다.
+2026-10-05. 대상은 Firebase `math3-dev`, Worker `math3-cp3-dev`, 저장소 `https://github.com/subsubT/game.git`이다. 운영 환경을 생성하거나 개발 환경을 승격하지 않았다. 현재 Worker는 `e9bc9633-db9c-457e-aeb6-cbc68f02664d`이며 5분 cron을 유지한다.
+
+19:09 KST 재개: 재승인 callback의 `OAUTH_STATE_INVALID` 원인을 값 노출 없는 상태 메타데이터로 확인했다. 해당 state는 started=true/used=false이며 18:14:36 KST에 만료됐다. 10분 expiry와 HttpOnly cookie 검사를 완화하지 않았다. 브라우저의 만료/재사용 오류는 고정 allowlist 대시보드로만 복귀하고 새 연결을 안내하도록 수정했다. 실제 만료 callback 재로드→고정 대시보드→만료 안내→기존 학생 2명/완료 2회 유지 확인 PASS. JSON API 거부와 임의 redirect 방어를 포함해 단위 47개·Sheets Chromium 회귀 PASS. Secret 변경 없음. 새 인증 요청의 승인과 동일 파일 복원은 계속 대기 중이다.
 
 ## 실제 통과한 검사
 

@@ -8,6 +8,11 @@ auth.setActiveAccount(options,auth.selectAccount(undefined,process.cwd()));
 await require('firebase-tools/lib/requireAuth.js').requireAuth(options);
 const client=new (require('firebase-tools/lib/apiv2.js').Client)({urlPrefix:'https://firestore.googleapis.com',auth:true});
 const base='/v1/projects/math3-dev/databases/(default)/documents';
+if(process.argv[2]==='states'){
+ const result=await client.post(base+':runQuery',{structuredQuery:{from:[{collectionId:'googleOAuthStates'}],where:{fieldFilter:{field:{fieldPath:'teacherId'},op:'EQUAL',value:{stringValue:'08e9014175c48979decec823f71a70f3'}}},select:{fields:['expiresAt','used','started'].map(fieldPath=>({fieldPath}))}}});
+ const states=(result.body||[]).filter(r=>r.document).map(({document:d})=>({expiresAt:new Date(Number(d.fields.expiresAt.integerValue)).toISOString(),expired:Number(d.fields.expiresAt.integerValue)<=Date.now(),used:d.fields.used?.booleanValue,started:d.fields.started?.booleanValue})).sort((a,b)=>b.expiresAt.localeCompare(a.expiresAt));
+ console.log(JSON.stringify({checkedAt:new Date().toISOString(),states:states.slice(0,3)}));process.exit(0);
+}
 const fields=['status','connectedAt','epoch','scopes','refreshCipher'];
 const result=await client.post(base+':runQuery',{structuredQuery:{from:[{collectionId:'sheetConnections'}],select:{fields:fields.map(fieldPath=>({fieldPath}))}}});
 const rows=(result.body||[]).filter(r=>r.document).map(({document:d})=>{

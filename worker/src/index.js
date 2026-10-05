@@ -29,14 +29,19 @@ export async function handleRequest(request, env, dependencies = {}) {
   // Navigation callbacks have no Firebase bearer token; the consumed state and
   // top-level HttpOnly cookie identify the initiating, still-active teacher.
   if (request.method === 'GET' && [START_PATH, CALLBACK_PATH].includes(requestUrl.pathname)) {
-    let oauthStage = 'oauth-database';
+    let oauthStage = 'oauth-database', service;
     try {
       if (requestUrl.origin !== new URL(env.GOOGLE_REDIRECT_URI).origin) throw new ApiError('FORBIDDEN');
       const db = await database(env, dependencies);
-      const service = createSheetService(db, env, dependencies);
+      service = createSheetService(db, env, dependencies);
       oauthStage = requestUrl.pathname === START_PATH ? 'oauth-start' : 'oauth-callback';
       return await (requestUrl.pathname === START_PATH ? service.start(request) : service.callback(request));
     } catch(error) {
+      // Browser navigations return to the fixed, validated dashboard. State
+      // expiry/replay remain rejected; only a new authenticated begin can retry.
+      if(error instanceof ApiError && ['OAUTH_STATE_INVALID','OAUTH_CODE_REPLAY'].includes(error.code) && request.headers.get('accept')?.includes('text/html') && service?.configured()) {
+        return new Response(null,{status:303,headers:{'cache-control':'no-store','referrer-policy':'no-referrer','content-security-policy':"default-src 'none'; frame-ancestors 'none'",location:env.GOOGLE_DASHBOARD_URL+'#sheets='+error.code}});
+      }
       if (!(error instanceof ApiError)) {
         const diagnostic = { stage:oauthStage, name:/^[A-Za-z]{1,40}$/.test(error?.name||'')?error.name:'Error', status:Number.isInteger(error?.status)?error.status:undefined, code:typeof error?.code==='string'&&/^[A-Z_]+$/.test(error.code)?error.code:undefined };
         if(dependencies.reportError)dependencies.reportError(diagnostic);

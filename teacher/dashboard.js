@@ -18,6 +18,7 @@ function errorText(error) {
   const code = String(error?.code || error?.message || '').split('/').at(-1).toUpperCase().replaceAll('-', '_');
   if (['CREDENTIAL_ALREADY_IN_USE','EMAIL_ALREADY_IN_USE','ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL','GOOGLE_ACCOUNT_CONFLICT'].includes(code)) return '이 Google 계정은 다른 관리 공간에 연결되어 있습니다. 현재 학급은 유지됩니다. 기존 관리 공간을 확인하거나 복구 키를 사용하세요.';
   if (code === 'GOOGLE_ACCOUNT_MISMATCH') return '기존에 연결한 Google 계정을 선택해 주세요. 계정 간 학급 이전은 자동으로 하지 않습니다.';
+  if (code === 'OAUTH_STATE_INVALID' || code === 'OAUTH_CODE_REPLAY') return 'Google 승인 요청이 만료되었거나 이미 사용되었습니다. 이 화면의 Google 연결을 눌러 새 요청을 시작하고 10분 안에 승인해 주세요. 학급과 게임 기록은 그대로입니다.';
   if (code === 'REAUTH_REQUIRED') return 'Google 권한을 다시 승인해 주세요. 게임 기록은 정상 보관되어 있습니다.';
   if (code === 'GOOGLE_NOT_CONFIGURED' || code === 'OPERATION_NOT_ALLOWED') return 'Google 연동 설정이 준비되지 않았습니다. 기존 학급 기능은 계속 사용할 수 있습니다.';
   if (code === 'SHEET_CREATE_UNCERTAIN') return '관리표 생성 응답을 확인하지 못했습니다. 잠시 후 다시 시도하면 기존 문서를 검색합니다. 중복 생성을 막기 위해 새 문서는 추가로 만들지 않습니다.';

@@ -4,6 +4,8 @@
 
 ## 현재 진행: Checkpoint 5 실제 OAuth·Drive 생성·Sheets 데이터·오류 격리 PASS — 해제/재승인 최종 검사 중
 
+2026-10-05 19:09 KST: 재승인 요청이 18:14:36에 만료된 사실을 확인했다. 새 Worker `e9bc9633-db9c-457e-aeb6-cbc68f02664d`에서 만료/재사용 브라우저 오류를 고정 대시보드 복귀와 새 연결 안내로 수정했다. state/cookie 보안 검사는 유지하고 Secret은 변경하지 않았다. 실제 만료 callback 복구, 단위 47개·Sheets Chromium PASS. 새 요청의 사용자 승인 후 같은 파일 복원은 아직 남았다.
+
 2026-10-05 최신 실제 결과는 [CHECKPOINT5_LIVE_EVIDENCE.md](CHECKPOINT5_LIVE_EVIDENCE.md)를 기준으로 한다. Worker `9e886193-a20c-4817-9139-43329cb6c07d`에서 native fetch receiver 오류를 수정했다. 실제 Google 연결·암호화 저장·기존 교사/학급 유지, 비공개 Drive 파일 생성, 4개 필수 탭과 실제 두 게임 결과(100문항), 반복 생성 동일 파일·중복 행 없음, Google 404 중 게임 저장/원장 불변, 실제 OAuth state 공격 거부가 통과했다. 아래 승인 대기 기록은 이전 이력이다. 연결 해제·재승인 후 동일 파일 복원 전에는 CP5 최종 PASS를 선언하지 않는다. Pages/production은 아직 변경하지 않았다.
 
 최신 재개: 사용자가 Google 계정 로그인 완료를 알렸다. 일반 Chrome의 현재 대시보드는 아직 `연결 안 됨`이며 익명 기준 기록 상태였다. 앱 연결을 재개하자 Google의 `math3-dev.firebaseapp.com 서비스로 로그인` 승인 화면과 `취소`/`계속` 버튼을 확인했다. 계정 로그인과 Firebase 앱 로그인 승인은 구분한다. 현재 필요한 사용자 동작은 열린 Google 창의 `계속`이다. 앱 승인/Worker Workspace 동의가 완료되기 전 uid 보존·token 교환·Sheets 생성 PASS를 선언하지 않는다. 이전 대기 탭 대신 현재 대시보드/승인 창을 다음 턴까지 유지했다.
