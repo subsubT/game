@@ -102,9 +102,12 @@ export function createSheetService(db, env, deps = {}) {
     return { authorizationUrl:`${new URL(env.GOOGLE_REDIRECT_URI).origin}${START_PATH}?ticket=${launch}` };
   }
   async function start(request) {
+    let phase='OAUTH_START_VALIDATION';
+    try {
     needConfig(); const ticket=new URL(request.url).searchParams.get('ticket');
     if(!/^[A-Za-z0-9_-]{43}$/.test(ticket||''))fail('OAUTH_STATE_INVALID');
     const browserKey=opaque();
+    phase='OAUTH_START_TRANSACTION';
     const state=await db.runTransaction(async tx=>{
       const launchRef=db.doc(`googleOAuthLaunches/${sha256(ticket)}`), launch=await tx.get(launchRef);
       if(!launch.exists||launch.data().used||launch.data().expiresAt<=clock())fail('OAUTH_STATE_INVALID');
@@ -113,9 +116,13 @@ export function createSheetService(db, env, deps = {}) {
       const who=await teacher(s.uid,tx); if(who.epoch!==s.epoch||who.space.googleOAuthAttempt!==s.attempt)fail('OAUTH_STATE_INVALID');
       tx.update(launchRef,{used:true}); tx.update(ref,{started:true,browserHash:sha256(browserKey)}); return s;
     });
+    phase='OAUTH_START_PAYLOAD';
     const payload=JSON.parse(unseal(state.payloadCipher,env.GOOGLE_TOKEN_ENCRYPTION_KEY,context(state,'state')));
+    phase='OAUTH_START_PARAMETERS';
     const params=new URLSearchParams({client_id:env.GOOGLE_CLIENT_ID,redirect_uri:env.GOOGLE_REDIRECT_URI,response_type:'code',scope:GOOGLE_SCOPES.join(' '),access_type:'offline',prompt:'consent',include_granted_scopes:'false',state:payload.state,nonce:payload.nonce,code_challenge:pkceChallenge(payload.verifier),code_challenge_method:'S256'});
+    phase='OAUTH_START_RESPONSE';
     return redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`,cookie(browserKey));
+    } catch(error) { if(!(error instanceof ApiError)&&error&&typeof error==='object'&&!error.code)error.code=phase;throw error; }
   }
   async function callback(request) {
     needConfig(); const url=new URL(request.url), raw=url.searchParams.get('state');

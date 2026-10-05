@@ -93,7 +93,9 @@ class Transaction {
 export class FirestoreRest {
   constructor(projectId, accessToken, fetcher = fetch, endpoint = 'https://firestore.googleapis.com/v1') {
     if (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(projectId)) throw new TypeError('Invalid Firebase project ID');
-    this.projectId = projectId; this.accessToken = accessToken; this.fetcher = fetcher;
+    this.projectId = projectId; this.accessToken = accessToken;
+    // Workers' native fetch rejects invocation with a REST adapter as `this`.
+    this.fetcher = (url, options) => fetcher(url, options);
     this.base = `${endpoint}/projects/${projectId}/databases/(default)/documents`;
     this.database = `projects/${projectId}/databases/(default)`;
   }

@@ -5,7 +5,7 @@ export const START_PATH = '/oauth/google/start';
 export const TABS = Object.freeze(['안내', '학생요약', '회차', '문항']);
 
 export class GoogleApi {
-  constructor(env, fetcher = fetch) { this.env = env; this.fetcher = fetcher; }
+  constructor(env, fetcher = fetch) { this.env = env; this.fetcher = (url, options) => fetcher(url, options); }
   async token(params) {
     let response;
     try {

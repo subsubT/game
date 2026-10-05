@@ -1,6 +1,6 @@
 # Checkpoint 5 — 선택형 Google Sheets 구현·검증
 
-2026-10-05. **현재 판정: 개발 Worker 배포·실제 게임 회귀 PASS, Google 사용자 로그인/승인 대기. 최종 PASS 아님.** 수동 설정 완료, Pages/production 미게시.
+2026-10-05. **현재 판정: 실제 OAuth·암호화 저장·Drive/Sheets 생성·실제 100문항·중복 방지·오류 격리 PASS. 실제 해제/재승인 최종 검사 중; CP5 최종 PASS 아님.** 최신 근거는 [실제 개발 통합 검증](CHECKPOINT5_LIVE_EVIDENCE.md)이다. 아래 승인 대기 내용은 이전 이력이다. Pages/production 미게시.
 
 ## 실제 재개 결과 — 2026-10-05 13:32 KST
 

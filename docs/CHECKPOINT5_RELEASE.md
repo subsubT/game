@@ -1,6 +1,6 @@
 # Checkpoint 5 후반 개발 검증·운영 배포·복구 절차
 
-2026-10-05. **개발 Worker 적용·실제 게임 회귀 완료; Google 사용자 승인 대기.** 실행 결과/활성 버전은 [현재 설정 상태](CHECKPOINT5_GOOGLE_SETUP.md)와 [실제 검증 범위](CHECKPOINT5_GOOGLE_SHEETS.md)에 기록했다. 아래 최종 production/Pages 단계는 실행하지 않았다.
+2026-10-05. **실제 OAuth·Drive 생성·Sheets 데이터·오류 격리 검증 완료; 해제/재승인 최종 검사 중.** 최신 활성 Worker `9e886193-a20c-4817-9139-43329cb6c07d`의 결과는 [실제 검증 기록](CHECKPOINT5_LIVE_EVIDENCE.md)에 기록했다. 아래 기존 버전/승인 대기는 이력이며 최종 production/Pages 단계는 실행하지 않았다.
 
 ## 개발 Worker 실제 연결
 

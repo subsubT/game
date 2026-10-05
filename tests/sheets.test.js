@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { generateKeyPairSync,sign } from 'node:crypto';
 import { createSheetService } from '../worker/src/sheets.js';
 import { GoogleApi,GOOGLE_SCOPES } from '../worker/src/google-api.js';
+import { FirestoreRest } from '../worker/src/firestore-rest.js';
 import { opaque,seal,unseal,pkceChallenge,verifyGoogleIdToken } from '../worker/src/google-crypto.js';
 import { literal,buildTables } from '../worker/src/sheet-data.js';
 import { handleRequest } from '../worker/src/index.js';
@@ -10,6 +11,13 @@ import { createHandlers } from '../worker/src/generated-handlers.js';
 import { buildSession,evaluateStep } from '../src/games/1math3/core.js';
 import { MemoryDb,fixtureEnv,FakeGoogle } from './sheets-fakes.js';
 const tid='a'.repeat(32),cid='c'.repeat(32),sid='d'.repeat(32),other='b'.repeat(32);
+test('native fetch is invoked without the adapter receiver in OAuth and scheduled transports',async()=>{
+  function strictFetch(url){assert.equal(this,undefined,'native Workers fetch cannot receive an adapter as this');return Promise.resolve(Response.json(url.includes('oauth2.googleapis.com')?{access_token:'test-only',expires_in:3600}:{name:'test',fields:{active:{booleanValue:true}}}));}
+  const db=new FirestoreRest('math3-dev','test-only',strictFetch);
+  assert.equal((await db.doc('teachers/test').get()).data().active,true);
+  const google=new GoogleApi(fixtureEnv(),strictFetch);
+  assert.equal((await google.refresh('test-only')).expires_in,3600);
+});
 function fixture(){
   const db=new MemoryDb(),env=fixtureEnv(),google=new FakeGoogle();let time=Date.now();
   db.rows.set(`teachers/${tid}`,{status:'active',authEpoch:1});db.rows.set('teacherBindings/teacher-a',{teacherId:tid,epoch:1,active:true});
@@ -200,4 +208,7 @@ test('server responses and diagnostics do not expose token, secret, body or exte
   const f=fixture(),diagnostics=[];
   const response=await handleRequest(new Request('https://worker.example/api/getGoogleConnectionStatus',{method:'POST',headers:{origin:'https://subsubt.github.io','content-type':'application/json',authorization:'Bearer private-bearer'},body:JSON.stringify({data:{}})}),f.env,{database:{doc(){throw Error(f.env.GOOGLE_CLIENT_SECRET+' private-bearer');}},verifyToken:async()=> 'teacher-a',reportError:d=>diagnostics.push(d)});
   assert.equal(response.status,500);const text=JSON.stringify(diagnostics)+await response.text();assert.ok(!text.includes(f.env.GOOGLE_CLIENT_SECRET));assert.ok(!text.includes('private-bearer'));
+  const navigation=await handleRequest(new Request(f.env.GOOGLE_REDIRECT_URI.replace('/callback','/start')+'?ticket='+opaque()),f.env,{database:{runTransaction(){throw new TypeError(f.env.GOOGLE_CLIENT_SECRET+' private-navigation-secret');}},reportError:d=>diagnostics.push(d)});
+  assert.equal(navigation.status,400);assert.equal(diagnostics.at(-1).code,'OAUTH_START_TRANSACTION');
+  const navigationText=JSON.stringify(diagnostics)+await navigation.text();assert.ok(!navigationText.includes(f.env.GOOGLE_CLIENT_SECRET));assert.ok(!navigationText.includes('private-navigation-secret'));
 });

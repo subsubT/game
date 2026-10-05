@@ -29,12 +29,19 @@ export async function handleRequest(request, env, dependencies = {}) {
   // Navigation callbacks have no Firebase bearer token; the consumed state and
   // top-level HttpOnly cookie identify the initiating, still-active teacher.
   if (request.method === 'GET' && [START_PATH, CALLBACK_PATH].includes(requestUrl.pathname)) {
+    let oauthStage = 'oauth-database';
     try {
       if (requestUrl.origin !== new URL(env.GOOGLE_REDIRECT_URI).origin) throw new ApiError('FORBIDDEN');
       const db = await database(env, dependencies);
       const service = createSheetService(db, env, dependencies);
+      oauthStage = requestUrl.pathname === START_PATH ? 'oauth-start' : 'oauth-callback';
       return await (requestUrl.pathname === START_PATH ? service.start(request) : service.callback(request));
     } catch(error) {
+      if (!(error instanceof ApiError)) {
+        const diagnostic = { stage:oauthStage, name:/^[A-Za-z]{1,40}$/.test(error?.name||'')?error.name:'Error', status:Number.isInteger(error?.status)?error.status:undefined, code:typeof error?.code==='string'&&/^[A-Z_]+$/.test(error.code)?error.code:undefined };
+        if(dependencies.reportError)dependencies.reportError(diagnostic);
+        else console.error('OAuth internal error',diagnostic);
+      }
       return body({ error: { code: error instanceof ApiError ? error.code : 'OAUTH_FAILED' } }, error instanceof ApiError ? error.status : 400, { 'referrer-policy': 'no-referrer', 'content-security-policy': "default-src 'none'" });
     }
   }

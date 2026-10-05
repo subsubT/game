@@ -10,6 +10,31 @@ async function call(name,data={}){
   const json=await response.json();if(!response.ok)throw Error(json.error?.code||'REQUEST_FAILED');return json.result;
 }
 let busy=false,done=false;
+const repeat=document.createElement('button');repeat.textContent='개발 검증: 관리표 생성 반복';document.body.append(repeat);
+const repeatStatus=document.createElement('p');repeatStatus.id='cp5-repeat-status';repeatStatus.setAttribute('role','status');document.body.append(repeatStatus);
+repeat.addEventListener('click',async()=>{
+ repeat.disabled=true;
+ try{
+  const classes=(await call('listClasses')).classes;
+  const cls=classes.find(c=>c.classId==='96f09e79e62f14d98c7836f5530f91d0');if(!cls)throw Error('TEST_CLASS_NOT_FOUND');
+  const before=await call('getGoogleConnectionStatus',{classId:cls.classId});
+  await call('createOrSelectSheet',{classId:cls.classId});
+  await call('createOrSelectSheet',{classId:cls.classId});
+  const after=await call('getGoogleConnectionStatus',{classId:cls.classId});
+  repeatStatus.textContent=before.sheet?.url===after.sheet?.url&&after.sheet?.status==='synced'?'개발 검증: 반복 생성 동일 파일 PASS':'개발 검증: '+JSON.stringify({sameFile:before.sheet?.url===after.sheet?.url,status:after.sheet?.status});
+ }catch(error){repeatStatus.textContent='개발 검증: '+error.message;}finally{repeat.disabled=false;}
+});
+const disconnect=document.createElement('button');disconnect.textContent='개발 검증: 연결 해제 실행';document.body.append(disconnect);
+disconnect.addEventListener('click',async()=>{
+ disconnect.disabled=true;
+ try{
+  const classes=(await call('listClasses')).classes;
+  if(!classes.some(c=>c.classId==='96f09e79e62f14d98c7836f5530f91d0'))throw Error('TEST_CLASS_NOT_FOUND');
+  const result=await call('disconnectSheets');
+  const after=await call('getGoogleConnectionStatus',{classId:'96f09e79e62f14d98c7836f5530f91d0'});
+  repeatStatus.textContent=JSON.stringify({disconnected:!after.connected,oldUrlHidden:after.sheet===null,revocationPending:result.revocationPending});
+ }catch(error){repeatStatus.textContent='개발 검증: '+error.message;}finally{disconnect.disabled=false;}
+});
 setInterval(async()=>{
   if(busy||done)return;busy=true;
   try{
