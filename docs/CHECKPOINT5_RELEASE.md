@@ -1,11 +1,11 @@
 # Checkpoint 5 후반 개발 검증·운영 배포·복구 절차
 
-2026-10-05. **실행 전 절차이며 아직 실행하지 않았다.** 사용자 설정 완료 이후에만 사용한다. [현재 설정 게이트](CHECKPOINT5_GOOGLE_SETUP.md)와 [구현/검증 범위](CHECKPOINT5_GOOGLE_SHEETS.md)를 먼저 확인한다.
+2026-10-05. **개발 Worker 적용·실제 게임 회귀 완료; Google 사용자 승인 대기.** 실행 결과/활성 버전은 [현재 설정 상태](CHECKPOINT5_GOOGLE_SETUP.md)와 [실제 검증 범위](CHECKPOINT5_GOOGLE_SHEETS.md)에 기록했다. 아래 최종 production/Pages 단계는 실행하지 않았다.
 
 ## 개발 Worker 실제 연결
 
 1. GitHub `subsubT/game`, Firebase `math3-dev`, Worker `math3-cp3-dev`를 현재 조회와 설정에서 대조한다. 사용자 로그인/Console 동의는 사용자에게 맡기고 Secret 값은 출력하지 않는다.
-2. 최신 미배포 Worker 버전의 **Secret 이름만** 조회해 기존 2개와 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_ENCRYPTION_KEY`가 모두 존재하는지 확인한다. staged Secret을 기존 코드 버전에 먼저 적용할 때는 실제 조회한 버전 ID만 사용해 `wrangler versions deploy '<조회한 버전 ID>@100%' --name 'math3-cp3-dev' --yes`를 실행한다. 준비 단계에서 이 명령을 실행하지 않는다. Secret 준비 버전의 이전 코드와 CP5 코드의 배포를 구분해 기록한다.
+2. `versions list`/`deployments list`의 메타데이터로 실제 버전을 대조한다. `versions secret list --latest-version` 성공을 게이트로 사용하지 않는다. Secret 값은 조회하지 않고 실제 인증된 `getGoogleConnectionStatus`와 OAuth 시작으로 존재/형식/동작을 확인한다. staged Secret 적용은 `wrangler versions deploy '<조회한 실제 버전 ID>@100%' --name 'math3-cp3-dev' --yes`를 사용한다. Secret 준비 버전과 CP5 코드 배포를 구분해 기록한다.
 3. 배포 전 기존 Worker 활성 버전·설정·cron을 읽기 전용으로 기록한다. Firestore의 변경 대상 Google 연결/export/job/teacher 메타데이터는 복원 가능하게 **서버 전용 비공개 저장소**에 백업하고 버전·환경을 기록한다. token/복구 키/학생 자료를 공개 저장소나 Pages에 넣지 않는다. 이번에는 기존 Rules/학생 성적 스키마를 변경하지 않는다.
 4. `npm test`, `npm run check:worker`, 필요한 Emulator/Chromium 검사 후 `npx wrangler deploy --name 'math3-cp3-dev'`로 새 개발 코드를 배포한다. 5분 cron·actual deployed version·고정 callback·CORS를 확인한다. 배포 후 로그에는 정해진 오류/계수만 남기고 OAuth URL query·요청 body·token을 수집하지 않는다.
 5. 정적 파일은 검증된 실제 Pages Origin에서 제공할 준비가 필요하다. **GitHub Pages의 기존 서비스 파일을 덮어쓰기 전 현재 Pages 설정/산출물을 기록**하고 개발 검증과 최종 운영 공개를 구분한다. 최종 Pages workflow/산출물은 실제 Google 개발 검증 이후 준비한다. 개발 검증에 기존 CP3 방식의 허용 Origin 테스트 서버를 사용했다면 이를 실제 Pages 게시로 보고하지 않는다.

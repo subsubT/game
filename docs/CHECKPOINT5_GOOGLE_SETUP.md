@@ -1,6 +1,10 @@
 # Checkpoint 5 — 사용자가 직접 할 Google 개발 설정
 
-2026-10-05. **설정 게이트: 실제 Google 연동 배포 전 중단.** 이 문서는 개발 검증용이다. 개발 Firebase/Worker를 운영으로 승격하지 않는다. Secret 값이나 다운로드한 OAuth JSON을 채팅에 보내지 않는다.
+2026-10-05. **수동 설정 완료; 실제 개발 Worker 적용 완료. Google 사용자 로그인/승인 대기.** 아래 절차는 설정 이력이며 다시 실행하지 않는다. 개발 Firebase/Worker를 운영으로 승격하지 않는다. Secret 값이나 OAuth JSON을 채팅에 보내지 않는다.
+
+사용자가 Drive/Sheets API, External/Testing·Test user, openid/drive.file, 고정 callback Web client, Firebase Google provider/허용 도메인, 세 Secret 등록 완료를 확인했다. Wrangler 4.138.0·4.147.0의 `versions secret list --latest-version` 오류를 배포 게이트로 사용하지 않았다. 활성 `wrangler secret list`는 이름만 검사했으며 실제 인증된 Worker에서 준비 여부를 확인했다.
+
+등록된 암호화 키는 서버의 32바이트 형식 검사에 실패했다. 값을 읽지 않고 오류 코드로 진단했고, 새 무작위 32바이트 개발 키를 stdin으로 등록했다(값 출력/파일 저장 없음). 이전 설정은 Worker `4bf2f5df-3e99-4563-9fc7-87e7fd5de22e`에 보존된다. 현재 `84d284a2-9508-4fac-8822-6b3f53660231`에서 `configured:true` 확인. Client ID/Secret은 바꾸지 않았다. 키 등록 도우미를 다시 실행하거나 기존 키로 덮어쓰지 않는다. 최신 Secret 목록 실패 시 도우미는 안전하게 중단하며 이 계정에서 그 성공을 전제로 진행하지 않는다.
 
 ## 1. 현재 프로젝트 식별
 
@@ -64,7 +68,6 @@ $env:WRANGLER_LOG_PATH = Join-Path (Get-Location) '.wrangler\logs'
 npx wrangler versions secret put GOOGLE_CLIENT_ID --name 'math3-cp3-dev'
 npx wrangler versions secret put GOOGLE_CLIENT_SECRET --name 'math3-cp3-dev'
 node tools/register-google-encryption-key.mjs --dev
-npx wrangler versions secret list --latest-version --name 'math3-cp3-dev'
 ```
 
 세 번째 명령은 무작위 암호화 키를 생성해 stdin으로 바로 보낸다. 화면·파일에 키 값을 기록하지 않는다. 최신 버전에 이미 같은 키가 있으면 보존하고 종료하므로 다시 실행하여 덮어쓰지 않는다. 검증한 Wrangler 4.138.0의 `versions secret put`은 최신 Worker 버전에서 바뀐 Secret만 갱신하고 나머지를 이어받으며 **실제 트래픽에 배포하지 않는다**. 마지막 명령도 이름과 버전만 표시한다. 생성된 버전 번호와 완료 여부는 알려 줘도 되지만 값은 보내지 않는다. 도구의 실계정 Secret 등록은 이 체크포인트에서 실행하지 않았다.

@@ -1,6 +1,24 @@
 # Checkpoint 5 — 선택형 Google Sheets 구현·검증
 
-2026-10-05. **현재 판정: 구현·모의 검증 완료, 사용자 Google 설정 대기. 최종 PASS 아님.** 실제 Google OAuth/Drive/Sheets, 새 코드의 실 Worker 실행, 최종 GitHub Pages와 production 통합 검증은 아직 수행하지 않았다. 사용자 요청의 수동 설정 게이트에서 멈춘다.
+2026-10-05. **현재 판정: 개발 Worker 배포·실제 게임 회귀 PASS, Google 사용자 로그인/승인 대기. 최종 PASS 아님.** 수동 설정 완료, Pages/production 미게시.
+
+## 실제 재개 결과 — 2026-10-05 13:32 KST
+
+| 항목 | 실행 근거 / 결과 |
+|---|---|
+| staged Secret 버전 적용 | `6c8116f8-99b6-4a32-92e5-6b67785b5d3c` 100% 적용 후 CP5 코드 배포 |
+| 활성 개발 Worker | `84d284a2-9508-4fac-8822-6b3f53660231`; 5분 cron 유지 |
+| 실제 설정 검사 | 인증된 API `configured:true`, `configurationError:null` |
+| 키 오류 수정 | 유효하지 않은 32바이트 형식을 값 조회 없이 진단; canonical 인코딩 지원 후 새 무작위 개발 키 등록. 이전 설정 `4bf2f5df-3e99-4563-9fc7-87e7fd5de22e` 보존. 성공한 연결 생성 전 수정 |
+| 단위·암호화·보안 | 45개 PASS; 기존 44개 + 키 인코딩/길이 거부 |
+| 실제 Firebase + Worker API | CP1~4 격리·순위·멱등성·최초 답안·Firestore 직접 접근 거부 PASS |
+| 실제 Chromium 게임/교사 | 승인→50문항→원장/순위→교사 상세, 응답 유실·새로고침 포함 PASS |
+| Sheets 모의 Chromium | 연결·실패·반복·해제·복귀 PASS; 실계정 결과로 대체하지 않음 |
+| 실제 Google 연결 | 같은 익명 교사/테스트 학급 유지 후 Firebase Google 사용자 승인 대기 |
+| Workspace / Drive / Sheets | callback/암호화 저장, 네 탭/열, 실원장, 중복 파일/행, 수동·예약 동기화, 재승인/해제·권한/오류 검증 대기 |
+| Pages / production | 변경하지 않음 |
+
+`tools/cp5-live-integration.mjs`가 허용 Pages Origin에서 allowlist 정적 파일만 로컬로 제공한다. Firebase/Worker/Google은 실제 요청이며 로그인·승인은 사용자가 한다. 전용 프로필/진행 상태는 Git 제외 `.cp5-test-artifacts/`에 있다. Pages 공개 검증으로 보고하지 않는다. 최신 Secret 목록 명령의 성공 대신 실제 Worker 동작으로 설정을 확인했다.
 
 저장소 https://github.com/subsubT/game · 개발 Firebase `math3-dev` · 개발 Worker `math3-cp3-dev`. 신규 Supabase/Vercel 및 production 리소스는 만들지 않았다. 수동 작업은 [정확한 Google 설정 안내](CHECKPOINT5_GOOGLE_SETUP.md), 후반 배포/복구는 [운영 절차](CHECKPOINT5_RELEASE.md)를 따른다.
 

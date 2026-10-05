@@ -40,6 +40,12 @@ test('AES-GCM ciphertext is randomized, context-bound, authenticated and uses an
   for(const [cipher,k,ctx] of [[a,opaque(),'teacher:a:1'],[a,key,'teacher:b:1'],[a,key,'teacher:a:2'],[a.slice(0,-2)+'AA',key,'teacher:a:1']])assert.throws(()=>unseal(cipher,k,ctx));
   assert.throws(()=>seal('x','short','ctx'));
 });
+
+test('AES-256 key accepts canonical encodings of the same 32 bytes and refuses malformed keys',()=>{
+  const key=opaque(),bytes=Buffer.from(key,'base64url'),envelope=seal('encoding-round-trip',key,'test');
+  for(const encoded of [bytes.toString('base64'),bytes.toString('hex'),key+'=',`\n${bytes.toString('base64')}\r\n`])assert.equal(unseal(envelope,encoded,'test'),'encoding-round-trip');
+  for(const bad of ['passphrase','z'.repeat(64),'!'.repeat(43),Buffer.alloc(31).toString('base64'),Buffer.alloc(33).toString('base64')])assert.throws(()=>seal('x',bad,'test'));
+});
 test('Google subject verifier validates RSA signature, audience, issuer, lifetime and nonce',async()=>{
   const {privateKey,publicKey}=generateKeyPairSync('rsa',{modulusLength:2048}),jwk={...publicKey.export({format:'jwk'}),kid:'sheet-test-key'};
   const claims={iss:'https://accounts.google.com',aud:'test-client',sub:'verified-subject',iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+3600,nonce:'nonce'};

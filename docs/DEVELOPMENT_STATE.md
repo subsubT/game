@@ -2,7 +2,15 @@
 
 기준일: 2026-09-27 · 변경 계약 반영: 2026-09-23
 
-## 현재 진행: Checkpoint 5 구현·모의 검증 완료 — 사용자 Google 설정 게이트 대기
+## 현재 진행: Checkpoint 5 개발 Worker 배포·회귀 PASS — 실제 Google 승인 대기
+
+2026-10-05 13:32 KST: 사용자 수동 Google/Firebase 설정 완료 후 CP5를 실제 개발 트래픽에 적용했다. 활성 버전 `84d284a2-9508-4fac-8822-6b3f53660231`, 5분 cron 유지. 실제 인증된 `getGoogleConnectionStatus`의 `configured:true`, `configurationError:null`을 확인했다. `versions secret list --latest-version` 오류는 배포 게이트로 사용하지 않았다.
+
+등록된 암호화 키가 서버의 32바이트 형식 검사를 만족하지 않아 OAuth가 차단됐다. 값을 읽지 않고 오류 코드로 진단했다. canonical Base64URL/Base64/hex 지원을 추가·검사했지만 계속 실패하여 새 무작위 32바이트 개발 키를 stdin으로 등록했다(값 출력/파일 저장 없음). 이전 설정은 Worker `4bf2f5df-3e99-4563-9fc7-87e7fd5de22e`에 보존했다. 성공한 OAuth 연결 생성 전 수정이며 Google Client ID/Secret은 유지했다.
+
+단위·보안 45개, 실제 Firebase/Worker API 및 교사→학생 50문항 Chromium 회귀 2개, Sheets 모의 Chromium 모두 PASS. 같은 익명 교사/테스트 학급을 유지한 전용 개발 브라우저가 Firebase Google **사용자 로그인/승인 화면**에서 대기한다. `tools/cp5-live-integration.mjs`의 allowlist route를 사용하므로 실제 Pages 게시 결과가 아니다. 전용 프로필/상태는 Git 제외 `.cp5-test-artifacts/`에 있다.
+
+**CP5 최종 PASS 불가(승인 대기).** 실제 Workspace callback/token 교환·암호화 연결·Drive/네 탭/실원장·반복 동기화·해제/재승인·예약 동기화·실계정 보안은 승인 후 검사한다. production 생성/개발 승격 및 최종 Pages 공개 검증은 하지 않았다. 아래는 재개 이전의 구현 이력이다.
 
 2026-10-05: CP4를 이어받은 `codex/checkpoint5-google-sheets` 브랜치에 선택형 Google 연결과 Sheets 내보내기를 구현했다. Worker 서버 code flow/state·PKCE·브라우저 cookie·Google subject 검증, 독립 AES-GCM refresh token 암호화, 앱 metadata 기반 중복 생성 방지, 별명 중심 네 탭의 결정적 재작성, 게임 저장과 분리된 Firestore outbox/5분 scheduled 재시도, 교사 UI를 추가했다. `npm test` 44개와 로컬 Worker/Functions Emulator·기존 CP4 Chromium 및 Sheets 모의 Chromium, Worker dry-run이 통과했다. 상세는 [CP5 구현/검증](CHECKPOINT5_GOOGLE_SHEETS.md).
 

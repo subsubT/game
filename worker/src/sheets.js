@@ -1,5 +1,5 @@
 import { ApiError } from './error.js';
-import { opaque, sha256, seal, unseal, pkceChallenge, verifyGoogleIdToken } from './google-crypto.js';
+import { opaque, sha256, seal, unseal, pkceChallenge, verifyGoogleIdToken, validEncryptionKey } from './google-crypto.js';
 import { GoogleApi, GOOGLE_SCOPES, START_PATH, CALLBACK_PATH } from './google-api.js';
 import { buildTables } from './sheet-data.js';
 
@@ -21,10 +21,15 @@ export function createSheetService(db, env, deps = {}) {
     try {
       const callback = new URL(env.GOOGLE_REDIRECT_URI), dashboard = new URL(env.GOOGLE_DASHBOARD_URL);
       const origins = (env.ALLOWED_ORIGINS || '').split(',').map(s=>s.trim());
-      return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && /^[A-Za-z0-9_-]{43}$/.test(env.GOOGLE_TOKEN_ENCRYPTION_KEY || '') &&
+      return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && validEncryptionKey(env.GOOGLE_TOKEN_ENCRYPTION_KEY) &&
         callback.protocol === 'https:' && callback.pathname === CALLBACK_PATH && !callback.search && !callback.hash && !callback.username && !callback.password &&
         dashboard.protocol === 'https:' && dashboard.pathname === '/game/teacher/index.html' && !dashboard.search && !dashboard.hash && !dashboard.username && !dashboard.password && origins.includes(dashboard.origin));
     } catch { return false; }
+  }
+  function configurationError() {
+    if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_TOKEN_ENCRYPTION_KEY) return 'GOOGLE_SECRET_MISSING';
+    if (!validEncryptionKey(env.GOOGLE_TOKEN_ENCRYPTION_KEY)) return 'GOOGLE_ENCRYPTION_KEY_FORMAT';
+    return configured() ? null : 'GOOGLE_URL_CONFIGURATION';
   }
   const needConfig = () => { if (!configured()) throw new ApiError('GOOGLE_NOT_CONFIGURED', undefined, 503); };
   async function teacher(uid, tx) {
@@ -166,7 +171,7 @@ export function createSheetService(db, env, deps = {}) {
         sheet={status:exp.leaseUntil>clock()?'syncing':interrupted?'failed':exp.status,lastSyncedAt:exp.lastSyncedAt||null,errorCode:interrupted?'GOOGLE_UNAVAILABLE':exp.errorCode||null,url:exp.spreadsheetId?`https://docs.google.com/spreadsheets/d/${exp.spreadsheetId}/edit`:null};
       }
     }
-    return {configured:configured(),connected,reauthRequired:reauth,sheetsAvailable:configured()&&connected,sheet};
+    return {configured:configured(),configurationError:configurationError(),connected,reauthRequired:reauth,sheetsAvailable:configured()&&connected,sheet};
   }
   async function disconnectSheets(data,uid) {
     fields(data,[]); const who=await teacher(uid), ref=connectionRef(who.teacherId);

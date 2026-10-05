@@ -6,11 +6,17 @@ export const sha256 = value => createHash('sha256').update(value).digest('hex');
 export const pkceChallenge = verifier => createHash('sha256').update(verifier).digest('base64url');
 
 function keyOf(secret) {
-  if (typeof secret !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(secret)) throw new ApiError('GOOGLE_NOT_CONFIGURED', undefined, 503);
-  const key = Buffer.from(secret, 'base64url');
-  if (key.length !== 32) throw new ApiError('GOOGLE_NOT_CONFIGURED', undefined, 503);
+  const text = typeof secret === 'string' ? secret.trim() : '';
+  let key;
+  if (/^[a-fA-F0-9]{64}$/.test(text)) key = Buffer.from(text, 'hex');
+  else if (/^(?:[A-Za-z0-9_-]{43}=?|[A-Za-z0-9+/]{43}=?)$/.test(text)) {
+    key = Buffer.from(text, 'base64url');
+    if (key.toString('base64url') !== text.replace(/=$/, '').replaceAll('+', '-').replaceAll('/', '_')) key = null;
+  }
+  if (key?.length !== 32) throw new ApiError('GOOGLE_NOT_CONFIGURED', undefined, 503);
   return key;
 }
+export function validEncryptionKey(secret) { try { keyOf(secret); return true; } catch { return false; } }
 // AAD prevents moving ciphertext between teachers, epochs, or secret purposes.
 export function seal(value, secret, context) {
   const iv = randomBytes(12), actual = createCipheriv('aes-256-gcm', keyOf(secret), iv);
