@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { initializeTestEnvironment, assertFails } from '@firebase/rules-unit-testing';
 import { FirestoreRest } from '../worker/src/firestore-rest.js';
 import { handleRequest } from '../worker/src/index.js';
+import { createSheetService } from '../worker/src/sheets.js';
+import { FakeGoogle, fixtureEnv } from './sheets-fakes.js';
 
 const projectId = 'demo-1math3-checkpoint3';
 const db = new FirestoreRest(projectId, 'owner', fetch, 'http://127.0.0.1:8080/v1');
@@ -71,9 +73,29 @@ test('Worker CP3 handlers preserve approval, server scoring, ranking, retries an
     const clientDb = rules.authenticatedContext(student).firestore();
     await assertFails(clientDb.doc(`classes/${cls.classId}`).get());
     await assertFails(clientDb.doc(`classes/${cls.classId}`).set({ score: 500 }));
+    // Real Firestore REST transactions + fake external Google transport.
+    const googleEnv = { ...fixtureEnv(), FIREBASE_PROJECT_ID: projectId }, google = new FakeGoogle();
+    const sheets = createSheetService(db, googleEnv, {googleApi:google,verifyGoogleIdentity:async()=>google.subject});
+    const begun = await sheets.handlers.beginGoogleConnection({},teacher);
+    const navigation = await sheets.start(new Request(begun.authorizationUrl));
+    const oauthUrl = new URL(navigation.headers.get('location'));
+    const callbackRequest = new Request(`${googleEnv.GOOGLE_REDIRECT_URI}?state=${oauthUrl.searchParams.get('state')}&code=emulator-google-code`,{headers:{cookie:navigation.headers.get('set-cookie').split(';')[0]}});
+    assert.equal(new URL((await sheets.callback(callbackRequest)).headers.get('location')).hash,'#sheets=connected');
+    await assert.rejects(sheets.callback(callbackRequest));
+    const storedConnection = (await db.doc(`sheetConnections/${space.teacherId}`).get()).data();
+    assert.ok(storedConnection.refreshCipher);assert.ok(!JSON.stringify(storedConnection).includes(google.refreshValue));
+    await assertFails(clientDb.doc(`sheetConnections/${space.teacherId}`).get());
+    await assertFails(clientDb.doc(`sheetConnections/${space.teacherId}`).set({status:'connected'}));
+    const firstSheet = await sheets.handlers.createOrSelectSheet({classId:cls.classId},teacher);
+    await sheets.handlers.syncSheet({classId:cls.classId},teacher);
+    assert.equal(google.creates,1);assert.equal(google.last.tables['회차'].length,2);assert.equal(google.last.tables['문항'].length,51);
+    assert.equal(firstSheet.sheet.status,'synced');
+    await assert.rejects(sheets.handlers.getGoogleConnectionStatus({classId:cls.classId},outsider));
     const recovered = 'worker-recovered-teacher';
     const nextKey = await call(recovered, 'recoverTeacherSpace', { recoveryKey: space.recoveryKey, requestId: id() });
     assert.ok(nextKey.recoveryKey);
+    assert.equal((await db.doc(`sheetConnections/${space.teacherId}`).get()).exists,false);
+    assert.equal((await sheets.handlers.getGoogleConnectionStatus({classId:cls.classId},recovered)).sheet,null);
     assert.equal((await call(recovered, 'listClasses')).classes[0].classId, cls.classId);
     await assert.rejects(call(teacher, 'listClasses'));
     await assert.rejects(call('worker-replay', 'recoverTeacherSpace', { recoveryKey: space.recoveryKey, requestId: id() }));

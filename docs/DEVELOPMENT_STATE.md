@@ -2,7 +2,15 @@
 
 기준일: 2026-09-27 · 변경 계약 반영: 2026-09-23
 
-## 현재 판정: Checkpoint 4 PASS — 교사용 대시보드 구현 및 검증 완료
+## 현재 진행: Checkpoint 5 구현·모의 검증 완료 — 사용자 Google 설정 게이트 대기
+
+2026-10-05: CP4를 이어받은 `codex/checkpoint5-google-sheets` 브랜치에 선택형 Google 연결과 Sheets 내보내기를 구현했다. Worker 서버 code flow/state·PKCE·브라우저 cookie·Google subject 검증, 독립 AES-GCM refresh token 암호화, 앱 metadata 기반 중복 생성 방지, 별명 중심 네 탭의 결정적 재작성, 게임 저장과 분리된 Firestore outbox/5분 scheduled 재시도, 교사 UI를 추가했다. `npm test` 44개와 로컬 Worker/Functions Emulator·기존 CP4 Chromium 및 Sheets 모의 Chromium, Worker dry-run이 통과했다. 상세는 [CP5 구현/검증](CHECKPOINT5_GOOGLE_SHEETS.md).
+
+**Checkpoint 5 최종 PASS 아님.** 실제 OAuth/Drive/Sheets·새 Worker 배포·최종 Pages/production 검증은 아직 하지 않았다. 사용자가 직접 해야 하는 API/OAuth 설정·정확한 callback·새 Worker Secret 등록 명령은 [Google 설정 게이트](CHECKPOINT5_GOOGLE_SETUP.md)에 정리했다. 여기서 실제 Google 연동 배포를 멈춘다. `math3-dev` / `math3-cp3-dev`를 운영으로 승격하지 않으며 production Firebase/Worker/OAuth client의 별도 사용자 설정이 필요하다. [후반 배포/복구 절차](CHECKPOINT5_RELEASE.md).
+
+현재 전체 내보내기는 학급당 학생/회차 각각 199건까지이며 200건이면 부분 export 없이 중단한다. 실제 Google 계정 충돌은 자동 병합/학급 이전하지 않고 기존 공간/복구를 안내한다. Free Worker 실제 CPU·하위 요청 수와 production 검증은 후반 실연결에서 확인한다. Secret 등록 도우미는 구문/help만 확인했고 실계정에 실행하지 않았다.
+
+## 이전 판정: Checkpoint 4 PASS — 교사용 대시보드 구현 및 검증 완료
 
 2026-09-29: 교사 관리 공간 진입·복구, 다중 학급, 참여 승인, 학생별 회차·문항, 학급 순위, 전체 순위 공개 설정, 학생 복귀 티켓을 `teacher/index.html`에 구현했다. 기존 Firebase Auth → Worker → Firestore 경계를 유지하고 교사 소유권을 확인하는 학급 순위 API를 추가했다. Worker/Functions Emulator와 실제 개발 Worker Chromium 기본 흐름을 검증했다. 상세 결과는 [CHECKPOINT4_TEACHER_DASHBOARD.md](CHECKPOINT4_TEACHER_DASHBOARD.md)를 참조한다. Checkpoint 5는 시작하지 않았다.
 

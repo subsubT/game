@@ -1,6 +1,8 @@
 # 전체 시스템 아키텍처
 
-기준일: 2026-09-15 · 변경 계약 반영: 2026-09-23 · Checkpoint 1 설계 확정 · 실제 리소스 생성/배포 없음
+기준일: 2026-09-15 · 변경 계약 반영: 2026-09-23 · CP5 구현 추록: 2026-10-05
+
+> 현재 실행 구조는 CP3~4의 Cloudflare Worker를 기본 API로 사용하며 Functions fallback을 보존한다. 아래 초기 설계의 Functions OAuth/예약 작업 책임은 CP5에서 **Worker HTTPS callback + scheduled handler**로 구현했다. 개발 리소스는 실제 연결되어 있지만 CP5 Google/최종 운영 배포는 사용자 설정 게이트 전이다. 확정 구현·제한(199건 export, 충돌 자동 병합 없음, 5분/한 학급 작업)은 [CP5 구현 문서](CHECKPOINT5_GOOGLE_SHEETS.md)를 따른다. 운영 Firebase/Worker/OAuth client 분리 원칙은 유지한다.
 
 ## 1. 결정 요약
 

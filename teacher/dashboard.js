@@ -7,7 +7,7 @@ const dateLabel = value => value ? new Intl.DateTimeFormat('ko-KR', { timeZone: 
 const empty = text => `<p class="empty">${escapeHtml(text)}</p>`;
 const nameOf = s => s?.privateName || s?.classAlias || '이름 없음';
 const typeNames = { add_three_small: '세 수 덧셈', subtract_three_small: '세 수 뺄셈', make_ten: '10 만들기', subtract_from_ten: '10에서 빼기', make_ten_then_add: '10 만들고 더하기' };
-const state = { classes: [], selected: null, pending: [], students: [], sessions: [], board: [], season: todaySeason(), tab: 'home', studentId: null, sessionId: null, details: null, recoveryKey: '', ticket: null, busy: false, loadVersion: 0, error: '' };
+const state = { classes: [], selected: null, pending: [], students: [], sessions: [], board: [], season: todaySeason(), tab: 'home', studentId: null, sessionId: null, details: null, recoveryKey: '', ticket: null, busy: false, loadVersion: 0, error: '', google: null };
 let call, auth, authSdk;
 
 function say(text, error = false) {
@@ -16,6 +16,16 @@ function say(text, error = false) {
 }
 function errorText(error) {
   const code = String(error?.code || error?.message || '').split('/').at(-1).toUpperCase().replaceAll('-', '_');
+  if (['CREDENTIAL_ALREADY_IN_USE','EMAIL_ALREADY_IN_USE','ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL','GOOGLE_ACCOUNT_CONFLICT'].includes(code)) return '이 Google 계정은 다른 관리 공간에 연결되어 있습니다. 현재 학급은 유지됩니다. 기존 관리 공간을 확인하거나 복구 키를 사용하세요.';
+  if (code === 'GOOGLE_ACCOUNT_MISMATCH') return '기존에 연결한 Google 계정을 선택해 주세요. 계정 간 학급 이전은 자동으로 하지 않습니다.';
+  if (code === 'REAUTH_REQUIRED') return 'Google 권한을 다시 승인해 주세요. 게임 기록은 정상 보관되어 있습니다.';
+  if (code === 'GOOGLE_NOT_CONFIGURED' || code === 'OPERATION_NOT_ALLOWED') return 'Google 연동 설정이 준비되지 않았습니다. 기존 학급 기능은 계속 사용할 수 있습니다.';
+  if (code === 'SHEET_CREATE_UNCERTAIN') return '관리표 생성 응답을 확인하지 못했습니다. 잠시 후 다시 시도하면 기존 문서를 검색합니다. 중복 생성을 막기 위해 새 문서는 추가로 만들지 않습니다.';
+  if (code === 'SHEET_DUPLICATES') return '이 학급의 관리표가 여러 개 발견되었습니다. 파일을 삭제하지 않고 연결을 멈췄습니다. 운영자에게 확인해 주세요.';
+  if (code === 'EXPORT_LIMIT') return '현재 내보내기 한도(학급당 회차·학생 각각 199개)를 넘었습니다. 기존 관리표는 유지되며 운영자의 용량 조정이 필요합니다.';
+  if (code === 'SYNC_BUSY') return '동기화가 진행 중입니다. 잠시 후 다시 확인해 주세요.';
+  if (code === 'GOOGLE_ACCESS_DENIED' || code === 'SHEET_UNAVAILABLE') return '관리표 접근 권한을 확인해 주세요. Google을 다시 연결해도 게임 기록은 유지됩니다.';
+  if (code.startsWith('GOOGLE_')) return 'Google 연결 또는 동기화를 완료하지 못했습니다. 잠시 후 다시 시도하세요. 게임 기록은 정상 보관됩니다.';
   if (code.includes('FORBIDDEN') || code.includes('PERMISSION_DENIED')) return '이 관리 공간에 접근할 수 없습니다. 복구가 필요하면 복구 키를 사용하세요.';
   if (code.includes('AUTH') || code.includes('UNAUTHENTICATED')) return '인증이 만료되었습니다. 화면을 새로고침해 다시 연결하세요.';
   if (code.includes('RATE_LIMITED') || code.includes('RESOURCE_EXHAUSTED')) return '요청이 너무 많습니다. 잠시 후 다시 시도하세요.';
@@ -32,6 +42,32 @@ function studentStats(id) {
 }
 function renderAuth() {
   app.innerHTML = `<div class="auth stack"><section class="card"><h2>교사 관리 공간</h2><p>이 브라우저의 익명 인증으로 관리 공간을 확인했습니다. 처음 사용한다면 새 공간을 만들고, 기존 공간으로 돌아오려면 복구 키를 입력하세요.</p><p class="muted small">브라우저 데이터가 지워지거나 기기를 바꾸면 복구 키가 필요합니다. 학급 참여 코드는 복구에 사용할 수 없습니다.</p></section><div class="auth-grid"><section class="card"><h3>새 교사</h3><p>새 관리 공간을 시작합니다.</p><button class="button" data-action="create-space">관리 공간 만들기</button></section><section class="card"><h3>기존 공간 복구</h3><form id="recover-space"><div class="field"><label for="recovery">복구 키</label><input id="recovery" type="password" autocomplete="off" required></div><button class="button secondary">관리 공간 되찾기</button></form></section></div></div>`;
+  if (config.enableGoogleProvider) app.querySelector('.auth').insertAdjacentHTML('beforeend','<section class="card"><h3>Google을 연결했던 교사</h3><p>기존 Google 계정으로 관리 공간을 확인합니다.</p><button class="button secondary" data-action="google-signin">Google로 돌아오기</button></section>');
+}
+function renderSheets() {
+  const g = state.google, sheet = g?.sheet;
+  const status = !g?.configured ? 'Google 연동 준비 중' : g.reauthRequired ? 'Google 재인증 필요' : !g.connected ? '연결 안 됨' : !sheet ? '관리표 없음' : sheet.status === 'syncing' ? '동기화 중' : sheet.status === 'synced' ? '최근 동기화 완료' : sheet.status === 'failed' ? '동기화 실패' : '관리표 없음';
+  const ready = g?.sheetsAvailable;
+  return `<section class="card" id="sheets-panel"><h3>선택 · Google Sheets</h3><p><strong>${status}</strong></p><p class="muted small">Google 없이도 학급을 관리할 수 있습니다. 연결하면 별명 중심의 관리표를 만들고 완료 기록을 자동으로 내보냅니다. 관리표의 수정은 게임 기록에 반영되지 않습니다.</p>${!g?.connected || g?.reauthRequired ? `<button class="button secondary small" data-action="google-connect" ${g?.configured?'':'disabled'}>${g?.reauthRequired?'Google 다시 승인':'Google 연결'}</button>` : `<button class="button secondary small" data-action="google-disconnect">Google 연결 해제</button>`}${ready && state.selected ? `<p>${!sheet?.url ? '<button class="button small" data-action="sheet-create">이 학급 관리표 만들기</button>' : `<button class="button small" data-action="sheet-sync">지금 동기화</button> <a class="button secondary small" href="${escapeHtml(sheet.url)}" target="_blank" rel="noopener noreferrer">스프레드시트 열기 ↗</a>`}</p>`:''}${sheet?.lastSyncedAt?`<p class="muted small">최근 동기화: ${dateLabel(sheet.lastSyncedAt)}</p>`:''}${sheet?.errorCode?`<p class="small">${escapeHtml(errorText({code:sheet.errorCode}))}</p>`:''}</section>`;
+}
+async function refreshSheets() {
+  const classId = state.selected;
+  try { const g = config.workerApiOrigin ? await call('getGoogleConnectionStatus',classId?{classId}:{}) : {configured:false}; if(classId===state.selected)state.google=g; }
+  catch { if(classId===state.selected)state.google={configured:false}; }
+}
+async function connectGoogle() {
+  // Firebase identity linking preserves uid. Workspace consent remains a separate
+  // server code flow, whose subject must match the verified Firebase provider.
+  if (config.enableGoogleProvider && auth.currentUser.isAnonymous) {
+    const uid = auth.currentUser.uid;
+    await authSdk.linkWithPopup(auth.currentUser,new authSdk.GoogleAuthProvider());
+    if(auth.currentUser.uid!==uid)throw Error('GOOGLE_ACCOUNT_MISMATCH');
+    await auth.currentUser.getIdToken(true);
+  }
+  const result = await call('beginGoogleConnection',{});
+  const launch = new URL(result.authorizationUrl);
+  if(launch.origin!==new URL(config.workerApiOrigin).origin||launch.pathname!=='/oauth/google/start')throw Error('GOOGLE_CONNECTION_FAILED');
+  location.assign(launch.href);
 }
 function recoveryNotice() {
   if (!state.recoveryKey) return '';
@@ -40,7 +76,7 @@ function recoveryNotice() {
 function renderShell() {
   const cls = selectedClass();
   const choices = state.classes.map(c => `<button class="class-choice" data-action="select-class" data-id="${escapeHtml(c.classId)}" aria-current="${c.classId === state.selected}">${escapeHtml(c.privateLabel)}<span>${c.joinEnabled ? '참여 열림' : '참여 닫힘'} · 전체 순위 ${c.globalOptIn ? '등록 중' : '등록 해제'}</span></button>`).join('');
-  app.innerHTML = `${recoveryNotice()}<div class="layout"><aside class="card sidebar"><h2>내 학급</h2><div class="class-list">${choices || '<p class="muted">아직 학급이 없습니다.</p>'}</div><form id="create-class"><div class="field"><label for="class-label">비공개 학급 이름</label><input id="class-label" maxlength="12" required placeholder="예: 1학년 2반"></div><button class="button secondary">학급 만들기</button></form></aside><div class="content">${cls ? renderClass(cls) : `<section class="card"><h2>첫 학급을 만들어 주세요</h2><p>왼쪽에서 학급을 만든 뒤 참여 코드를 학생에게 알려 주세요.</p></section>`}</div></div>`;
+  app.innerHTML = `${recoveryNotice()}<div class="layout"><aside class="card sidebar"><h2>내 학급</h2><div class="class-list">${choices || '<p class="muted">아직 학급이 없습니다.</p>'}</div><form id="create-class"><div class="field"><label for="class-label">비공개 학급 이름</label><input id="class-label" maxlength="12" required placeholder="예: 1학년 2반"></div><button class="button secondary">학급 만들기</button></form>${renderSheets()}</aside><div class="content">${cls ? renderClass(cls) : `<section class="card"><h2>첫 학급을 만들어 주세요</h2><p>왼쪽에서 학급을 만든 뒤 참여 코드를 학생에게 알려 주세요.</p></section>`}</div></div>`;
 }
 function renderClass(cls) {
   const tabs = [['home','한눈에 보기'],['pending',`승인 대기 ${state.pending.length}`],['students',`학생 ${state.students.length}`],['records','학생 기록'],['rank','학급 순위']];
@@ -96,14 +132,14 @@ async function refreshClasses(preferred) {
   const classes=(await call('listClasses',{})).classes;
   state.classes=classes;
   state.selected=classes.some(c=>c.classId===preferred)?preferred:classes.some(c=>c.classId===state.selected)?state.selected:classes[0]?.classId||null;
-  if(state.selected) await loadClass(); else renderShell();
+  if(state.selected) await loadClass(); else { await refreshSheets(); renderShell(); }
 }
 async function loadClass() {
   const id=state.selected, version=++state.loadVersion;
   app.innerHTML='<p class="loading">학급 자료를 불러오는 중…</p>';
   const [pending,students,sessions,board]=await Promise.all([
     call('listPendingStudents',{classId:id}),call('listClassStudents',{classId:id}),
-    call('listClassSessions',{classId:id,gameId:'1math3'}),call('getTeacherLeaderboard',{classId:id,seasonId:state.season})
+    call('listClassSessions',{classId:id,gameId:'1math3'}),call('getTeacherLeaderboard',{classId:id,seasonId:state.season}),refreshSheets()
   ]);
   if(version!==state.loadVersion||id!==state.selected)return;
   state.pending=pending.students;state.students=students.students;state.sessions=sessions.sessions;state.board=board.entries;
@@ -114,7 +150,7 @@ async function work(fn, success) {
   if(state.busy)return;
   state.busy=true; document.querySelectorAll('button').forEach(b=>b.disabled=true);say('');
   try{await fn();if(success)say(success);}catch(error){say(errorText(error),true);}
-  finally{state.busy=false;document.querySelectorAll('button').forEach(b=>b.disabled=false);}
+  finally{state.busy=false;document.querySelectorAll('button').forEach(b=>b.disabled=false);const connect=app.querySelector('[data-action="google-connect"]');if(connect&&!state.google?.configured)connect.disabled=true;}
 }
 async function initialize() {
   if(!config?.apiKey||!config?.projectId){app.innerHTML=empty('Firebase 연결 설정을 확인해 주세요.');return;}
@@ -137,7 +173,10 @@ async function initialize() {
       if(!response.ok){const error=new Error(result.error?.code||'NETWORK_UNAVAILABLE');error.code=result.error?.code;throw error;}
       return result.result;
     };
-    try{await refreshClasses();}catch(error){
+    try{await refreshClasses();
+      const outcome=/^#sheets=([A-Z_]+|connected)$/.exec(location.hash)?.[1];
+      if(outcome){history.replaceState(null,'',location.pathname+location.search);say(outcome==='connected'?'Google 연결이 완료되었습니다. 학급 관리표를 만들 수 있습니다.':errorText({code:outcome}),outcome!=='connected');}
+    }catch(error){
       const code=String(error.code||error.message||'').toUpperCase().replaceAll('-', '_');
       if(code.includes('FORBIDDEN')||code.includes('PERMISSION_DENIED'))renderAuth();
       else{app.innerHTML='<section class="card"><h2>연결을 확인할 수 없습니다</h2><button class="button" data-action="retry-init">다시 시도</button></section>';say(errorText(error),true);}
@@ -158,6 +197,18 @@ app.addEventListener('change',event=>{
 app.addEventListener('click',event=>{
   const button=event.target.closest('[data-action]');if(!button||state.busy)return;
   const action=button.dataset.action,id=button.dataset.id;
+  if(action==='google-connect')work(connectGoogle);
+  if(action==='google-signin')work(async()=>{await authSdk.signInWithPopup(auth,new authSdk.GoogleAuthProvider());await refreshClasses();});
+  if(action==='sheet-create'||action==='sheet-sync')work(async()=>{
+    const classId=state.selected;
+    state.google={...state.google,sheet:{...state.google.sheet,status:'syncing'}};renderShell();
+    try{await call(action==='sheet-create'?'createOrSelectSheet':'syncSheet',{classId});}
+    finally{await refreshSheets();renderShell();}
+  },'학급 관리표 동기화를 완료했습니다.');
+  if(action==='google-disconnect'){
+    if(!confirm('Google 자동 동기화를 중지할까요? 학습 기록과 Drive에 이미 만든 관리표는 남습니다.'))return;
+    work(async()=>{const result=await call('disconnectSheets',{});await refreshSheets();renderShell();say(result.revocationPending?'앱 연결을 해제했습니다. Google 서버의 취소 응답을 확인하지 못했으므로 Google 계정의 앱 접근 권한에서도 연결을 취소해 주세요.':'Google 연결을 해제했습니다.');});
+  }
   if(action==='retry-init'){app.innerHTML='<p class="loading">다시 연결하는 중…</p>';initialize();return;}
   if(action==='create-space')work(async()=>{const result=await call('createTeacherSpace',{requestId:crypto.randomUUID()});state.recoveryKey=result.recoveryKey||'';await refreshClasses();},'관리 공간을 만들었습니다. 복구 키를 보관하세요.');
   if(action==='hide-key'){state.recoveryKey='';renderShell();}
@@ -179,3 +230,8 @@ app.addEventListener('click',event=>{
   if(action==='hide-ticket'){button.closest('.notice')?.remove();state.ticket=null;}
 });
 initialize();
+setInterval(async()=>{
+  if(!state.classes.length||state.busy||!state.google?.connected)return;
+  await refreshSheets();
+  const panel=document.querySelector('#sheets-panel');if(panel&&!state.busy)panel.outerHTML=renderSheets();
+},30000);

@@ -5,9 +5,12 @@
   "compatibility_date": "2026-09-27",
   "workers_dev": true,
   "preview_urls": false,
+  "triggers": { "crons": ["*/5 * * * *"] },
   "vars": {
     "FIREBASE_PROJECT_ID": "math3-dev",
-    "ALLOWED_ORIGINS": "https://subsubt.github.io"
+    "ALLOWED_ORIGINS": "https://subsubt.github.io",
+    "GOOGLE_REDIRECT_URI": "https://math3-cp3-dev.subsubt-math3-dev.workers.dev/oauth/google/callback",
+    "GOOGLE_DASHBOARD_URL": "https://subsubt.github.io/game/teacher/index.html"
   },
   "secrets": {
     "required": ["FIREBASE_SERVICE_ACCOUNT_JSON", "MATH3_SERVER_SECRET"]

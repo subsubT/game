@@ -24,7 +24,7 @@ async function publicCerts(fetcher) {
   return certs;
 }
 
-export async function verifyFirebaseIdToken(idToken, projectId, fetcher = fetch) {
+export async function verifyFirebaseIdToken(idToken, projectId, fetcher = fetch, returnClaims = false) {
   if (typeof idToken !== 'string' || idToken.length > 8192) throw new ApiError('AUTH_REQUIRED');
   const pieces = idToken.split('.');
   if (pieces.length !== 3) throw new ApiError('AUTH_REQUIRED');
@@ -40,7 +40,7 @@ export async function verifyFirebaseIdToken(idToken, projectId, fetcher = fetch)
   const pem = (await publicCerts(fetcher))[header.kid];
   if (typeof pem !== 'string') throw new ApiError('AUTH_REQUIRED');
   if (!verify('RSA-SHA256', Buffer.from(`${pieces[0]}.${pieces[1]}`), pem, Buffer.from(pieces[2], 'base64url'))) throw new ApiError('AUTH_REQUIRED');
-  return payload.sub;
+  return returnClaims ? payload : payload.sub;
 }
 
 export function parseServiceAccount(json, projectId) {

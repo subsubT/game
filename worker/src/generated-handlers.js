@@ -134,8 +134,15 @@ export function createHandlers(db, secret) {
       const expected = Buffer.from(key.data().secretHash, 'hex'), given = Buffer.from(digest(recoverySecret), 'hex');
       if (!timingSafeEqual(expected, given)) fail('FORBIDDEN');
       const teacherId = key.data().teacherId, teacherRef = db.doc(`teachers/${teacherId}`), space = await tx.get(teacherRef);
+      const google = await tx.get(db.doc(`sheetConnections/${teacherId}`));
+      const subjectRef = google.data()?.subject ? db.doc(`googleSubjects/${hash(google.data().subject)}`) : null;
+      const subjectOwner = subjectRef ? await tx.get(subjectRef) : null;
       const epoch = space.data().authEpoch + 1;
       tx.update(keyRef, { active: false, usedAt: now() }); tx.update(teacherRef, { authEpoch: epoch });
+      // Recovery invalidates Workspace access even when using the Functions fallback.
+      // Existing teacher-owned files remain in Drive; reconnect before returning URLs.
+      tx.delete(db.doc(`sheetConnections/${teacherId}`));
+      if (subjectOwner?.data()?.teacherId === teacherId) tx.delete(subjectRef);
       tx.create(db.doc(`teacherBindings/${uid}`), { teacherId, epoch, active: true });
       tx.create(db.doc(`recoveryKeys/${newId}`), { teacherId, secretHash: digest(newSecret), version: epoch, active: true });
       return { teacherId, recoveryKey: `${newId}.${newSecret}` };
@@ -373,20 +380,28 @@ export function createHandlers(db, secret) {
       if (!result.accepted) return { accepted: false, reason: result.reason, session: safeSession(s) };
       s.feedbackIndex = q.index; s.revision++;
       if (result.final) s.currentIndex++;
-      let refs, rankStudent, rankClass;
+      let refs, rankStudent, rankClass, sheetExport;
       if (s.currentIndex === 50 && result.final) {
-        const [studentSnap, classSnap, rank] = await Promise.all([
+        const [studentSnap, classSnap, rank, sheet] = await Promise.all([
           tx.get(studentRef(binding)), tx.get(db.doc(`classes/${binding.classId}`)),
-          rankRefs(tx, binding.classId, binding.studentId, boardOf(s.seasonId))
+          rankRefs(tx, binding.classId, binding.studentId, boardOf(s.seasonId)),
+          tx.get(db.doc(`sheetExports/${binding.classId}`))
         ]);
         if (!studentSnap.exists || studentSnap.data().status !== 'active' || !classSnap.exists) fail('FORBIDDEN');
         rankStudent = studentSnap.data(); rankClass = classSnap.data(); refs = rank;
+        // Export outbox is part of the Firestore commit, never a Google request.
+        // The scheduled worker rechecks owner, binding epoch, and connection.
+        if (sheet.data()?.spreadsheetId) {
+          const connection = await tx.get(db.doc(`sheetConnections/${rankClass.ownerTeacherId}`));
+          sheetExport = connection.data()?.status === 'connected' && connection.data()?.subject === sheet.data().subject;
+        }
         s.status = 'complete'; s.finishedAt = now(); s.endReason = 'complete';
       }
       const response = JSON.parse(JSON.stringify({ accepted: true, final: Boolean(result.final), correct: Boolean(result.correct), session: safeSession(s) }));
       if (result.final) tx.set(sref.collection('answers').doc(String(q.index).padStart(2, '0')), { questionIndex: q.index, typeId: q.typeId, subtype: q.subtype, firstResponse: q.firstResponse, firstCorrect: q.firstCorrect, skipped: Boolean(q.skipped), requestId: data.requestId, receivedAt: now() });
       tx.update(sref, { questionsJson: JSON.stringify(s.questions), currentIndex: s.currentIndex, feedbackIndex: s.feedbackIndex, revision: s.revision, status: s.status, finishedAt: s.finishedAt || null, endReason: s.endReason || null });
       if (refs) projectRank(tx, refs, s, rankStudent, rankClass, studentRef(binding));
+      if (sheetExport) tx.set(db.doc(`sheetJobs/${binding.classId}`), { state: 'pending', dirty: `${s.sessionId}:${s.revision}`, nextRunAt: 0 });
       tx.create(op, { fingerprint, resultJson: JSON.stringify(response) }); return response;
     });
   });

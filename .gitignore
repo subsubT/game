@@ -13,3 +13,8 @@ ui-debug.log
 .wrangler/
 tools/temurin21.zip
 tools/temurin21/
+.vercel/
+client_secret*.json
+*service-account*.json
+*firebase-adminsdk*.json
+.cp5-test-artifacts/

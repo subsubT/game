@@ -3,10 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/1math3-core.test.js tests/1math3-browser-bundle.test.js tests/worker-auth.test.js",
+    "test": "node --test tests/1math3-core.test.js tests/1math3-browser-bundle.test.js tests/worker-auth.test.js tests/sheets.test.js",
     "build:student": "node tools/build-1math3.mjs",
     "build:functions": "node tools/build-functions.mjs",
     "build:worker": "node tools/build-worker.mjs",
+    "test:sheets-browser": "node --test tests/sheets-browser.test.js",
     "check:worker": "node tools/build-worker.mjs --check && wrangler deploy --dry-run",
     "serve:student": "node tools/serve-static.mjs",
     "emulators:test": "node tools/run-emulator-tests.mjs",

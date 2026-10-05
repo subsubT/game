@@ -100,6 +100,11 @@ export class FirestoreRest {
   name(path) { return `${this.database}/documents/${path}`; }
   doc(path) { return new DocumentReference(this, path); }
   collection(path) { return new CollectionReference(this, path); }
+  async getAll(...refs) {
+    const rows = await this.request(`${this.base}:batchGet`, { method: 'POST', body: { documents: refs.map(ref => this.name(ref.path)) } });
+    const found = new Map(rows.filter(row => row.found).map(row => [row.found.name, row.found]));
+    return refs.map(ref => new DocumentSnapshot(ref, found.get(this.name(ref.path))));
+  }
   async request(url, { method = 'GET', body } = {}) {
     const response = await this.fetcher(url, { method, headers: { authorization: `Bearer ${this.accessToken}`, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
     if (response.status === 404 && method === 'GET') return null;
