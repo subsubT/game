@@ -9,7 +9,7 @@ import { MemoryDb,fixtureEnv,FakeGoogle } from './sheets-fakes.js';
 
 test('Chromium teacher Google opt-in preserves uid/classes, handles Sheets failure, reconnects and disconnects', {timeout:90000}, async()=>{
   const root=resolve(import.meta.dirname,'..'),env=fixtureEnv(),db=new MemoryDb(),google=new FakeGoogle();
-  let mockTime=Date.now();
+  let mockTime=Date.now(),failStatusOnce=false;
   const handlers=createHandlers(db,env.MATH3_SERVER_SECRET);
   const space=await handlers.createTeacherSpace({requestId:crypto.randomUUID()},'browser-teacher');
   const cls=await handlers.createClass({privateLabel:'선택 연동반',requestId:crypto.randomUUID()},'browser-teacher');
@@ -29,6 +29,9 @@ test('Chromium teacher Google opt-in preserves uid/classes, handles Sheets failu
       await route.fulfill({contentType:({'.html':'text/html','.js':'text/javascript','.css':'text/css'})[extname(file)],body:await readFile(file)});
     });
     await context.route(`${worker}/**`,async route=>{
+      if(failStatusOnce&&new URL(route.request().url()).pathname==='/api/getGoogleConnectionStatus'&&route.request().method()==='POST'){
+        failStatusOnce=false;await route.fulfill({status:503,contentType:'application/json',headers:{'access-control-allow-origin':origin},body:JSON.stringify({error:{code:'GOOGLE_UNAVAILABLE'}})});return;
+      }
       const r=route.request(),req=new Request(r.url(),{method:r.method(),headers:await r.allHeaders(),body:r.method()==='POST'?r.postData():undefined});
       const res=await handleRequest(req,env,{database:db,clock:()=>mockTime,googleApi:google,verifyGoogleIdentity:async()=>google.subject,verifyToken:async token=>({sub:'browser-teacher',firebase:token==='linked-teacher'?{identities:{'google.com':[google.subject]}}:{}})});
       // Playwright bypasses routes for automatic HTTP redirect hops. A test-only
@@ -50,6 +53,14 @@ test('Chromium teacher Google opt-in preserves uid/classes, handles Sheets failu
     assert.equal(db.rows.get(`classes/${cls.classId}`).ownerTeacherId,space.teacherId);
     await page.getByRole('button',{name:'이 학급 관리표 만들기'}).click();await page.getByText('학급 관리표 동기화를 완료했습니다.').waitFor();
     assert.equal(google.creates,1);await page.getByRole('link',{name:/스프레드시트 열기/}).waitFor();
+    const originalSheet=await page.getByRole('link',{name:/스프레드시트 열기/}).getAttribute('href');
+    failStatusOnce=true;await page.getByRole('button',{name:'새로고침',exact:true}).click();
+    await page.getByText('Google 연결 상태를 확인하지 못했습니다.',{exact:true}).waitFor();
+    assert.equal(await page.getByText('Google 연동 준비 중',{exact:true}).count(),0);
+    assert.equal(await page.getByRole('link',{name:/스프레드시트 열기/}).count(),0);
+    assert.equal(await page.getByRole('tab',{name:/학생 0/}).isEnabled(),true);
+    await page.getByRole('button',{name:'연결 상태 다시 확인'}).click();await page.getByText('최근 동기화 완료',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('link',{name:/스프레드시트 열기/}).getAttribute('href'),originalSheet);assert.equal(google.creates,1);
     await page.getByRole('button',{name:'지금 동기화'}).click();await page.getByText('학급 관리표 동기화를 완료했습니다.').waitFor();assert.equal(google.creates,1);
     google.writeFailure='GOOGLE_UNAVAILABLE';await page.getByRole('button',{name:'지금 동기화'}).click();await page.locator('#message').getByText('게임 기록은 정상 보관됩니다.',{exact:false}).waitFor();
     await page.getByRole('button',{name:'새로고침',exact:true}).click();await page.getByText('동기화 실패',{exact:true}).waitFor();
