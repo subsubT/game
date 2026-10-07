@@ -14,7 +14,7 @@
     "FIREBASE_PROJECT_ID": "math3-dev",
     "ALLOWED_ORIGINS": "https://subsubt.github.io,https://math3-dev--cp5-google-q3ym6qkw.web.app",
     "GOOGLE_REDIRECT_URI": "https://math3-cp3-dev.subsubt-math3-dev.workers.dev/oauth/google/callback",
-    "GOOGLE_DASHBOARD_URL": "https://math3-dev--cp5-google-q3ym6qkw.web.app/game/teacher/index.html"
+    "GOOGLE_DASHBOARD_URL": "https://subsubt.github.io/game/teacher/index.html"
   },
   "secrets": {
     "required": [

@@ -1,0 +1,16 @@
+{
+  "environment": "production",
+  "repositoryUrl": "https://github.com/subsubT/game.git",
+  "pagesUrl": "https://subsubt.github.io/game/",
+  "firebaseProjectId": "math3-dev",
+  "workerName": "math3-cp3-dev",
+  "workerApiOrigin": "https://math3-cp3-dev.subsubt-math3-dev.workers.dev",
+  "firebase": {
+    "apiKey": "AIzaSyAK3rPReOIImvrWQlrJxrcf5ONBCDk1odc",
+    "authDomain": "math3-dev.firebaseapp.com",
+    "projectId": "math3-dev",
+    "appId": "1:432688432871:web:aa796a3fdffc4f97254442",
+    "region": "asia-northeast3",
+    "workerApiOrigin": "https://math3-cp3-dev.subsubt-math3-dev.workers.dev"
+  }
+}

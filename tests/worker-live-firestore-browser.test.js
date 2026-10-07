@@ -7,13 +7,14 @@ import { chromium } from 'playwright';
 
 const root = resolve(import.meta.dirname, '..');
 const site = 'https://subsubt.github.io';
+const published = process.env.MATH3_PAGES_TEST === '1';
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
 
 test('actual browser Firebase SDK cannot read or write Firestore directly', { skip: process.env.MATH3_LIVE_TEST !== '1', timeout: 120000 }, async () => {
   const browser = await chromium.launch({ headless: true, executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' });
   try {
     const context = await browser.newContext();
-    await context.route(`${site}/**`, async route => {
+    if (!published) await context.route(`${site}/**`, async route => {
       try {
         const path = resolve(root, `.${decodeURIComponent(new URL(route.request().url()).pathname)}`);
         if (!path.startsWith(root)) throw Error('outside root');
@@ -21,7 +22,7 @@ test('actual browser Firebase SDK cannot read or write Firestore directly', { sk
       } catch { await route.fulfill({ status: 404, body: '' }); }
     });
     const page = await context.newPage();
-    await page.goto(`${site}/teacher/index.html`);
+    await page.goto(`${site}${published ? '/game' : ''}/teacher/index.html`);
     await page.getByRole('button', { name: '관리 공간 만들기' }).click();
     await page.getByLabel('비공개 학급 이름').fill('규칙검증반');
     await page.getByRole('button', { name: '학급 만들기' }).click();

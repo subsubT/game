@@ -10,12 +10,12 @@ if(review){
  if(source?.projectId!=='math3-dev'||source.workerApiOrigin!=='https://math3-cp3-dev.subsubt-math3-dev.workers.dev')throw Error('Review development identity mismatch');
  metadata={environment:'review-dev',repositoryUrl:'https://github.com/subsubT/game.git',pagesUrl:'https://subsubt.github.io/game/',firebaseProjectId:source.projectId,workerName:'math3-cp3-dev',workerApiOrigin:source.workerApiOrigin,firebase:Object.fromEntries(publicKeys.filter(k=>source[k]!==undefined).map(k=>[k,source[k]]))};
 }else{
- try{metadata=JSON.parse(process.env.MATH3_PUBLIC_DEPLOYMENT_CONFIG||'');}catch{throw Error('Production public deployment metadata is required; no development fallback');}
+ try{metadata=JSON.parse(process.env.MATH3_PUBLIC_DEPLOYMENT_CONFIG||await readFile(resolve(root,'config/pages-public.json'),'utf8'));}catch{throw Error('Approved public deployment metadata is required; no local configuration fallback');}
  const keys=['environment','repositoryUrl','pagesUrl','firebaseProjectId','workerName','workerApiOrigin','firebase'];
  if(!metadata||Object.keys(metadata).some(k=>!keys.includes(k))||metadata.environment!=='production'||metadata.repositoryUrl!=='https://github.com/subsubT/game.git'||metadata.pagesUrl!=='https://subsubt.github.io/game/')throw Error('Production deployment identity mismatch');
- if(!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(metadata.firebaseProjectId||'')||metadata.firebaseProjectId==='math3-dev'||!metadata.workerName||metadata.workerName==='math3-cp3-dev')throw Error('Separate production resources are required');
+ if(metadata.firebaseProjectId!=='math3-dev'||metadata.workerName!=='math3-cp3-dev')throw Error('Approved existing service identities are required');
  const endpoint=new URL(metadata.workerApiOrigin);
- if(endpoint.protocol!=='https:'||endpoint.pathname!=='/'||endpoint.search||endpoint.hash||endpoint.username||endpoint.password||endpoint.hostname.includes('math3-cp3-dev'))throw Error('Production Worker origin is invalid');
+ if(metadata.workerApiOrigin!=='https://math3-cp3-dev.subsubt-math3-dev.workers.dev'||endpoint.pathname!=='/'||endpoint.search||endpoint.hash||endpoint.username||endpoint.password)throw Error('Approved Worker origin is invalid');
  if(!metadata.firebase||Object.keys(metadata.firebase).some(k=>!publicKeys.includes(k))||metadata.firebase.projectId!==metadata.firebaseProjectId||metadata.firebase.workerApiOrigin!==metadata.workerApiOrigin)throw Error('Public Firebase configuration does not match deployment metadata');
  for(const key of ['apiKey','authDomain','projectId','appId','workerApiOrigin'])if(typeof metadata.firebase[key]!=='string'||!metadata.firebase[key]||metadata.firebase[key].includes('REPLACE_'))throw Error('Public Firebase configuration is incomplete');
  if(metadata.firebase.authDomain!==metadata.firebaseProjectId+'.firebaseapp.com')throw Error('Firebase auth domain does not match the selected project');
@@ -26,8 +26,9 @@ for(const file of allowed){await mkdir(dirname(resolve(output,file)),{recursive:
 const config={...metadata.firebase,enableGoogleProvider:true};
 await writeFile(resolve(output,'firebase-config.js'),'globalThis.MATH3_FIREBASE_CONFIG='+JSON.stringify(config)+';\n');
 await writeFile(resolve(output,'.nojekyll'),'');
+await copyFile(resolve(root,'config/1math2-public.json'),resolve(output,'1math2-config.json'));
 if(review)for(const file of ['1math3.html','teacher/index.html']){const path=resolve(output,file),html=await readFile(path,'utf8');await writeFile(path,html.replace('<body>','<body><p role="note">math3-dev 검토용 산출물 · 운영 배포 대상 아님 · 가상 데이터만 사용</p>'));}
-const expected=new Set([...allowed,'firebase-config.js','.nojekyll']);
+const expected=new Set([...allowed,'firebase-config.js','1math2-config.json','.nojekyll']);
 async function check(path,prefix=''){
  for(const entry of await readdir(path,{withFileTypes:true})){
   const name=prefix+entry.name;

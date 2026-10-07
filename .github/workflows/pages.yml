@@ -1,4 +1,4 @@
-name: Publish verified production Pages
+name: Publish verified service Pages
 on:
   workflow_dispatch:
 permissions:
@@ -14,9 +14,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Build only public files with separate production identities
-        env:
-          MATH3_PUBLIC_DEPLOYMENT_CONFIG: ${{ vars.MATH3_PUBLIC_DEPLOYMENT_CONFIG }}
+      - name: Build only public files with approved existing service identities
         run: node tools/build-pages.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4

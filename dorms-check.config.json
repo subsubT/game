@@ -1,0 +1,15 @@
+{
+  "app": {
+    "name": "1math2",
+    "url": "",
+    "stack": "Unknown / 범용"
+  },
+  "tracks": [
+    "security"
+  ],
+  "edzipCase": null,
+  "teacher": {
+    "dormsHandle": ""
+  },
+  "ownershipConfirmed": true
+}

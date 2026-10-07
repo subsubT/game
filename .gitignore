@@ -22,3 +22,7 @@ client_secret*.json
 dorms-check.config.json
 dist-pages/
 dist-pages-review/
+*.log
+Thumbs.db
+.DS_Store
+references/
