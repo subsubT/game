@@ -7,7 +7,7 @@ const dateLabel = value => value ? new Intl.DateTimeFormat('ko-KR', { timeZone: 
 const empty = text => `<p class="empty">${escapeHtml(text)}</p>`;
 const nameOf = s => s?.privateName || s?.classAlias || '이름 없음';
 const typeNames = { add_three_small: '세 수 덧셈', subtract_three_small: '세 수 뺄셈', make_ten: '10 만들기', subtract_from_ten: '10에서 빼기', make_ten_then_add: '10 만들고 더하기' };
-const state = { classes: [], selected: null, pending: [], students: [], sessions: [], board: [], season: todaySeason(), tab: 'home', studentId: null, sessionId: null, details: null, recoveryKey: '', ticket: null, busy: false, loadVersion: 0, error: '', google: null };
+const state = { classes: [], selected: null, pending: [], students: [], sessions: [], board: [], season: todaySeason(), tab: 'home', studentId: null, sessionId: null, details: null, recoveryKey: '', ticket: null, busy: false, loadVersion: 0, error: '', google: null, googleDisconnectPending: false };
 let call, auth, authSdk;
 
 function say(text, error = false) {
@@ -48,6 +48,7 @@ function renderAuth() {
 function renderSheets() {
   const g = state.google, sheet = g?.sheet;
   if (g?.unavailable) return `<section class="card" id="sheets-panel"><h3>선택 · Google Sheets</h3><p><strong>Google 연결 상태를 확인하지 못했습니다.</strong></p><p class="muted small">잠시 후 다시 확인해 주세요. 학급 관리와 게임 기록은 계속 사용할 수 있습니다.</p><button class="button secondary small" data-action="sheet-refresh">연결 상태 다시 확인</button></section>`;
+  if (state.googleDisconnectPending && g?.connected) return `<section class="card" id="sheets-panel"><h3>선택 · Google Sheets</h3><div role="group" aria-label="Google 연결 해제 확인"><p><strong>Google 자동 동기화를 중지할까요?</strong></p><p>모든 내 학급의 자동 동기화가 중지됩니다. 학습 기록과 Drive에 이미 만든 관리표는 남습니다.</p><button class="button secondary small" data-action="google-disconnect-cancel">계속 연결</button> <button class="button danger small" data-action="google-disconnect-confirm">자동 동기화 중지</button></div></section>`;
   const status = !g?.configured ? 'Google 연동 준비 중' : g.reauthRequired ? 'Google 재인증 필요' : !g.connected ? '연결 안 됨' : !sheet ? '관리표 없음' : sheet.status === 'syncing' ? '동기화 중' : sheet.status === 'synced' ? '최근 동기화 완료' : sheet.status === 'failed' ? '동기화 실패' : '관리표 없음';
   const ready = g?.sheetsAvailable;
   return `<section class="card" id="sheets-panel"><h3>선택 · Google Sheets</h3><p><strong>${status}</strong></p><p class="muted small">Google 없이도 학급을 관리할 수 있습니다. 연결하면 별명 중심의 관리표를 만들고 완료 기록을 자동으로 내보냅니다. 관리표의 수정은 게임 기록에 반영되지 않습니다.</p>${!g?.connected || g?.reauthRequired ? `<button class="button secondary small" data-action="google-connect" ${g?.configured?'':'disabled'}>${g?.reauthRequired?'Google 다시 승인':'Google 연결'}</button>` : `<button class="button secondary small" data-action="google-disconnect">Google 연결 해제</button>`}${ready && state.selected ? `<p>${!sheet?.url ? '<button class="button small" data-action="sheet-create">이 학급 관리표 만들기</button>' : `<button class="button small" data-action="sheet-sync">지금 동기화</button> <a class="button secondary small" href="${escapeHtml(sheet.url)}" target="_blank" rel="noopener noreferrer">스프레드시트 열기 ↗</a>`}</p>`:''}${sheet?.lastSyncedAt?`<p class="muted small">최근 동기화: ${dateLabel(sheet.lastSyncedAt)}</p>`:''}${sheet?.errorCode?`<p class="small">${escapeHtml(errorText({code:sheet.errorCode}))}</p>`:''}</section>`;
@@ -207,15 +208,21 @@ app.addEventListener('click',event=>{
     try{await call(action==='sheet-create'?'createOrSelectSheet':'syncSheet',{classId});}
     finally{await refreshSheets();renderShell();}
   },'학급 관리표 동기화를 완료했습니다.');
-    if(action==='sheet-refresh')work(async()=>{await refreshSheets();renderShell();});
-    if(action==='google-disconnect'){
-    if(!confirm('Google 자동 동기화를 중지할까요? 학습 기록과 Drive에 이미 만든 관리표는 남습니다.'))return;
+  if(action==='sheet-refresh')work(async()=>{await refreshSheets();renderShell();});
+  if(action==='google-disconnect'||action==='google-disconnect-cancel'){
+    state.googleDisconnectPending=action==='google-disconnect';
+    document.querySelector('#sheets-panel').outerHTML=renderSheets();
+    app.querySelector(`[data-action="${state.googleDisconnectPending?'google-disconnect-cancel':'google-disconnect'}"]`)?.focus();return;
+  }
+  if(action==='google-disconnect-confirm'){
+    if(!state.googleDisconnectPending||!state.google?.connected)return;
+    state.googleDisconnectPending=false;
     work(async()=>{const result=await call('disconnectSheets',{});await refreshSheets();renderShell();say(result.revocationPending?'앱 연결을 해제했습니다. Google 서버의 취소 응답을 확인하지 못했으므로 Google 계정의 앱 접근 권한에서도 연결을 취소해 주세요.':'Google 연결을 해제했습니다.');});
   }
   if(action==='retry-init'){app.innerHTML='<p class="loading">다시 연결하는 중…</p>';initialize();return;}
   if(action==='create-space')work(async()=>{const result=await call('createTeacherSpace',{requestId:crypto.randomUUID()});state.recoveryKey=result.recoveryKey||'';await refreshClasses();},'관리 공간을 만들었습니다. 복구 키를 보관하세요.');
   if(action==='hide-key'){state.recoveryKey='';renderShell();}
-  if(action==='select-class'){state.selected=id;state.tab='home';state.studentId=null;state.sessionId=null;state.details=null;work(()=>loadClass());}
+  if(action==='select-class'){state.googleDisconnectPending=false;state.selected=id;state.tab='home';state.studentId=null;state.sessionId=null;state.details=null;work(()=>loadClass());}
   if(action==='refresh')work(async()=>{await refreshClasses(state.selected);},'학급 자료를 새로 읽었습니다.');
   if(action==='tab'){state.tab=button.dataset.tab;work(()=>loadClass());}
   if(action==='approve')work(async()=>{const classId=state.selected;await call('approveStudent',{classId,studentId:id});const [pending,students]=await Promise.all([call('listPendingStudents',{classId}),call('listClassStudents',{classId})]);if(classId===state.selected){state.pending=pending.students;state.students=students.students;renderShell();}},'학생을 승인했습니다.');
@@ -234,7 +241,7 @@ app.addEventListener('click',event=>{
 });
 initialize();
 setInterval(async()=>{
-  if(!state.classes.length||state.busy||(!state.google?.connected&&!state.google?.unavailable))return;
+  if(!state.classes.length||state.busy||state.googleDisconnectPending||(!state.google?.connected&&!state.google?.unavailable))return;
   await refreshSheets();
   const panel=document.querySelector('#sheets-panel');if(panel&&!state.busy)panel.outerHTML=renderSheets();
 },30000);

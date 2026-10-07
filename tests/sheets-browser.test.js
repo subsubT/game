@@ -65,7 +65,10 @@ test('Chromium teacher Google opt-in preserves uid/classes, handles Sheets failu
     google.writeFailure='GOOGLE_UNAVAILABLE';await page.getByRole('button',{name:'지금 동기화'}).click();await page.locator('#message').getByText('게임 기록은 정상 보관됩니다.',{exact:false}).waitFor();
     await page.getByRole('button',{name:'새로고침',exact:true}).click();await page.getByText('동기화 실패',{exact:true}).waitFor();
     await page.getByRole('tab',{name:/학생 0/}).click();await page.getByText('승인된 학생이 없습니다.').waitFor();
-    page.on('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Google 연결 해제'}).click();await page.getByText('Google 연결을 해제했습니다.').waitFor();
+    await page.getByRole('button',{name:'Google 연결 해제'}).click();await page.getByRole('group',{name:'Google 연결 해제 확인'}).waitFor();
+    assert.equal(google.revoked.length,0);await page.getByRole('button',{name:'계속 연결',exact:true}).click();assert.equal(google.revoked.length,0);
+    assert.equal(db.rows.get(`sheetConnections/${space.teacherId}`).status,'connected');
+    await page.getByRole('button',{name:'Google 연결 해제'}).click();await page.getByRole('button',{name:'자동 동기화 중지',exact:true}).click();await page.getByText('Google 연결을 해제했습니다.').waitFor();
     await page.getByText('연결 안 됨',{exact:true}).waitFor();assert.equal(google.revoked.length,1);assert.equal(db.rows.has(`sheetConnections/${space.teacherId}`),false);
     mockTime+=11000;google.writeFailure=null;
     await page.getByRole('button',{name:'Google 연결',exact:true}).click();await page.getByText('Google 연결이 완료되었습니다.',{exact:false}).waitFor();
