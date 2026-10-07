@@ -1,4 +1,4 @@
-module.exports = function firebaseConfig(request, response) {
+export default function firebaseConfig(request, response) {
   const config = {
     apiKey: process.env.FIREBASE_API_KEY,
     authDomain: process.env.FIREBASE_AUTH_DOMAIN,

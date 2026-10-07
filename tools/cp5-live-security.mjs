@@ -3,7 +3,7 @@ import { liveApiKey } from '../tests/live-config.js';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { writeFile } from 'node:fs/promises';
-const worker='https://math3-cp3-dev.subsubt-math3-dev.workers.dev',origin='https://math3-dev--cp5-google-q3ym6qkw.web.app';
+const worker='https://math3-cp3-dev.subsubt-math3-dev.workers.dev',origin='https://subsubt.github.io';
 const require=createRequire(import.meta.url),auth=require('firebase-tools/lib/auth.js'),options={project:'math3-dev',nonInteractive:true};
 auth.setActiveAccount(options,auth.selectAccount(undefined,process.cwd()));await require('firebase-tools/lib/requireAuth.js').requireAuth(options);
 const admin=new (require('firebase-tools/lib/apiv2.js').Client)({urlPrefix:'https://firestore.googleapis.com',auth:true});
@@ -25,6 +25,8 @@ const denied=await fetch(worker+'/oauth/google/callback?state='+started.state+'&
 const reused=await fetch(worker+'/oauth/google/callback?state='+started.state+'&error=access_denied',{redirect:'manual',headers:{cookie:started.cookie}});assert.equal((await reused.json()).error.code,'OAUTH_STATE_INVALID');evidence.checks.push('callback consumed state replay rejected');
 const exp=await start(await fixture());
 const stateId=createHash('sha256').update(exp.state).digest('hex');
+const backup=await admin.get(base+'/googleOAuthStates/'+stateId);
+await writeFile('.cp5-test-artifacts/final/security-test-state-before.json',JSON.stringify(backup.body));
 await admin.patch(base+'/googleOAuthStates/'+stateId+'?updateMask.fieldPaths=expiresAt',{fields:{expiresAt:{integerValue:String(Date.now()-1)}}});
 const expired=await fetch(worker+'/oauth/google/callback?state='+exp.state+'&error=access_denied',{redirect:'manual',headers:{cookie:exp.cookie}});assert.equal((await expired.json()).error.code,'OAUTH_STATE_INVALID');evidence.checks.push('expired test-only state rejected');
-await writeFile('.cp5-test-artifacts/live-google-security.json',JSON.stringify(evidence,null,2));console.log(JSON.stringify(evidence));
+await writeFile('.cp5-test-artifacts/final/live-google-security.json',JSON.stringify(evidence,null,2));console.log(JSON.stringify(evidence));

@@ -26,7 +26,8 @@ test('actual browser Firebase SDK cannot read or write Firestore directly', { sk
     await page.getByRole('button', { name: '관리 공간 만들기' }).click();
     await page.getByLabel('비공개 학급 이름').fill('규칙검증반');
     await page.getByRole('button', { name: '학급 만들기' }).click();
-    const classId = await page.locator('[data-action="pending"]').first().getAttribute('data-class');
+    await page.locator('.code').waitFor();
+    const classId = await page.locator('[data-action="select-class"][aria-current="true"]').getAttribute('data-id');
     assert.ok(classId);
     const result = await page.evaluate(async id => {
       const appSdk = await import('https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js');
