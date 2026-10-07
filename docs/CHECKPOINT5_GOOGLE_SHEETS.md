@@ -1,5 +1,7 @@
 # Checkpoint 5 — 선택형 Google Sheets 구현·검증
 
+2026-10-07 현재: 기존 `math3-dev` + `math3-cp3-dev` + 기존 OAuth를 실제 공개 서비스로 사용한다. Pages 게시/핵심 공개 회귀 PASS. 공개 Origin의 실제 Google 승인/callback/Sheets는 사용자 계정 선택 클릭 대기이며 CP5 전체 PASS 보류. [현재 근거](CHECKPOINT5_LIVE_EVIDENCE.md). 아래 2026-10-05 미게시/분리 production 요구는 과거 이력이다.
+
 2026-10-05. **현재 판정: 실제 Google 개발 통합 PASS. 해제/revoke·재승인 후 같은 파일/100문항 복원·별도 cron까지 확인했다. CP5 전체 최종 PASS는 운영 Pages 전체 통합 전까지 보류한다.** 최신 근거는 [실제 개발 통합 검증](CHECKPOINT5_LIVE_EVIDENCE.md)과 [Pages 준비](CHECKPOINT5_PAGES_PREPARATION.md)이다. 아래 승인 대기 내용은 이전 이력이다. Pages/production 미게시.
 
 ## 실제 재개 결과 — 2026-10-05 13:32 KST

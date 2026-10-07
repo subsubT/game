@@ -1,4 +1,30 @@
-# Checkpoint 5 실제 Google 개발 통합 검증
+# Checkpoint 5 공개 배포·실제 검증
+
+## 2026-10-07 KST 현재 판정
+
+**Pages 게시 및 Google 외 공개 전체 흐름 PASS. 공개 Origin 실제 Google 로그인/승인/Sheets 재검증은 사용자 계정 선택 클릭 대기. CP5 전체 최종 PASS 보류.**
+
+기존 `math3-dev` + `math3-cp3-dev` + 기존 OAuth Client를 그대로 실제 공개 서비스에 사용한다. 새 production 리소스/데이터 이전/Secret 변경 없음. 이전의 별도 production 요구는 과거 설계다.
+
+학생 https://subsubt.github.io/game/1math3.html · 교사 https://subsubt.github.io/game/teacher/ . Pages run `37607043018` success, 공개 commit `de4d12e5969a69d2bbd3c0e0ea1a4e60792ae908`. Worker `ca7fbc93-8732-4a84-9b9e-764d6473d14f`, callback 유지/Pages 고정 복귀/5분 cron. Firebase Pages domain 이미 authorized.
+
+| 검사 | 실제 결과 |
+|---|---|
+| 정적 의존성·제외 | 화면/assets 200·MIME 정상, 두 교사 URL 정상. allowlist 12개. docs/worker/functions/references/환경/증거/config 원본 404 |
+| 공개 학생·교사 Chromium | 실제 Pages 다운로드에서 승인→정규 50문항→서버 저장·학급/전체 순위, 응답 유실 재시도·새로고침 복원 PASS(173초). 복수 학급·승인·학생 목록·회차/50문항 상세·공개 설정·복구 키·학생 복귀 티켓·모바일 폭 PASS. Google 미연결 정상. 로컬 HTML route 대체 없음 |
+| 실제 Firestore 브라우저 | SDK 직접 읽기/쓰기 모두 permission-denied PASS(14초). 오래된 dashboard selector를 현재 select-class로 맞춰 재검사 |
+| 실제 Worker API | 500/490 서버 채점·타 교사/학생/학급 거부·점수 위조·인증/Origin·중복 재시도·순위/공개 토글·경합 PASS 2개(163초) |
+| 공개 Origin OAuth 공격 | launch replay·cookie 누락·consumed state·test-only 만료·임의 returnUrl·타 교사 Sheets API 거부 PASS. 만료 변경 대상은 이번 합성 state, 비공개 백업 후 검사 |
+| 기존 게임 3개 | 공개 시작·채점·콘솔 오류 없음 PASS(12초). 결과 저장/종료 전 닫아 기존 운영 점수 미작성. 최초 root favicon 404는 data favicon으로 제거 후 재배포 |
+| 자동/Emulator | 단위 47/47, Sheets Chromium 1/1, Functions fallback/Auth/Rules 1/1(128초), Worker REST/Sheets 1/1(9초), 교사→학생 Functions Chromium 1/1(196초), Worker dry-run PASS |
+| Worker 런타임 | 새로운 합성 익명 계정의 인증 요청 3개 정상. 60초 tail 이벤트 5개(200×3, 204×1, onboarding 403×1), 5xx/내부 오류 0. 원시 URL/query/body/token/log 저장 없음 |
+| 자격증명 | tracked source·dist-pages credential patterns PASS. source map/서버/문서/증거/서비스계정/OAuth secret/token 공개 없음. Firebase 웹 apiKey는 공개 config |
+| 도름스체크 | 독립 비공개 경로 v0.3.1 detect/init/security scan 완료. 확인 30/미확인 5/해당 없음 1. 헤더·정책·메타 등 권고. 공개 Firebase apiKey는 Secret 노출 아님 |
+| 실제 Google 공개 Origin | 일반 Chrome 공개 teacher→Google로 돌아오기→기존 계정 선택 화면 도달. Google 팝업 자동 클릭 CDP timeout으로 사용자 계정 선택 요청. callback/Sheets PASS로 대신 기록하지 않음 |
+
+증거/백업/스크린샷/시험 자료는 `.cp5-test-artifacts/final/`에만 저장, Git/Pages 제외. 새 시험 학급/익명 계정/회차 삭제 없음. [복구·한도](CHECKPOINT5_RELEASE.md). 본인 클릭 뒤 공개 OAuth callback/동일 교사·학급·파일/중복 없는 sync/해제·재승인을 완료해야 `Checkpoint 5 PASS — 전체 프로젝트 완료`를 기록한다.
+
+## 이하 2026-10-05 개발 preview의 실제 Google PASS 이력
 
 2026-10-05. 대상은 Firebase `math3-dev`, Worker `math3-cp3-dev`, 저장소 `https://github.com/subsubT/game.git`이다. 운영 환경을 생성하거나 개발 환경을 승격하지 않았다. 현재 Worker는 `e9bc9633-db9c-457e-aeb6-cbc68f02664d`이며 5분 cron을 유지한다.
 

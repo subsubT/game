@@ -1,5 +1,17 @@
 # 개발 상태 및 Checkpoint 인계
 
+## 2026-10-07 KST 현재 상태 — Pages 공개 통합 PASS, 실제 Google 공개 승인 검증 대기
+
+기존 `math3-dev` + `math3-cp3-dev` + 기존 Google OAuth를 그대로 실제 공개 서비스에 사용한다. 별도 production 생성·이름 변경·데이터 이전 없음. 이 사용자 결정이 아래 과거 분리 설계보다 우선한다.
+
+학생 https://subsubt.github.io/game/1math3.html · 교사 https://subsubt.github.io/game/teacher/ . main 병합·push·Pages Actions 게시 완료. run `37607043018` success, 공개 commit `de4d12e5969a69d2bbd3c0e0ea1a4e60792ae908`. Worker `ca7fbc93-8732-4a84-9b9e-764d6473d14f`, 기존 callback·Pages 고정 복귀·5분 cron 유지.
+
+공개 50문항 학생/교사·재시도·복구·복귀·학급 격리·Firestore 직접 거부·기존 게임 3개·자동 47개/Sheets Chromium/Functions·Worker Emulator 회귀 PASS. 새 화면/assets 정상, 민감 경로 404. 기존 게임 로직 재작성 없이 data favicon과 Pages 설정 경로만 보완했다. 문서/서버/Secret/시험 증거는 산출물 제외.
+
+Google 공개 Origin의 계정 선택은 일반 Chrome 팝업 자동 클릭 timeout으로 본인 클릭 요청 상태다. 개발 preview의 Google/Sheets PASS를 이번 공개 callback PASS로 대체하지 않는다. **Checkpoint 5 전체 최종 PASS 보류.** [현재 실검증](CHECKPOINT5_LIVE_EVIDENCE.md), [Pages](CHECKPOINT5_PAGES_PREPARATION.md), [배포·복구](CHECKPOINT5_RELEASE.md).
+
+## 이하 2026-10-05 및 이전 개발 이력 (현재 지시/상태 아님)
+
 기준일: 2026-09-27 · 변경 계약 반영: 2026-09-23
 
 ## 현재 진행: Checkpoint 5 실제 Google 개발 통합 PASS — 운영 설정·Pages 전체 통합 조건 남음

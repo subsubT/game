@@ -1,4 +1,6 @@
-# Checkpoint 5 — 사용자가 직접 할 Google 개발 설정
+# Checkpoint 5 — Google 설정 이력과 현재 운영 대상
+
+2026-10-07 현재 운영 결정: 기존 `math3-dev`/`math3-cp3-dev`/현재 OAuth Client를 그대로 공개 서비스에 사용한다. Pages 게시 완료, Worker 고정 복귀는 공개 교사 화면이다. 새 production/Secret 설정은 필요 없다. 아래 2026-10-05 설정·preview 경로는 과거 이력이다.
 
 2026-10-05. **실제 Google 개발 통합 PASS. 실제 연결 해제/revoke·재승인·같은 파일 복원까지 완료했다.** 최신 Worker `e9bc9633-db9c-457e-aeb6-cbc68f02664d`의 근거는 [실제 검증 기록](CHECKPOINT5_LIVE_EVIDENCE.md)에 있다. [운영 Pages 설정 조건](CHECKPOINT5_PAGES_PREPARATION.md)은 남았다. 아래 절차는 설정 이력이며 다시 실행하지 않는다. 개발 Firebase/Worker를 운영으로 승격하지 않는다. Secret 값이나 OAuth JSON을 채팅에 보내지 않는다.
 
@@ -20,7 +22,7 @@
 | 허용 브라우저 Origin | `https://subsubt.github.io` |
 | Supabase / Vercel | 사용하지 않음. project ref / projectId / orgId 없음 |
 
-위 Pages 위치는 **복귀 위치로 확정한 값**이며 새 교사 화면을 실제 Pages에 게시·검증했다는 뜻이 아니다. 실제 Google 검증 때 이 화면이 해당 Origin에서 제공되어야 한다. 최종 공개 운영 Pages 산출물은 별도 production 리소스 설정 이후 준비한다.
+위 Pages는 2026-10-07 실제 게시하고 핵심 교사·학생 흐름을 검증했다. 공개 Google callback/Sheets 검증은 본인 계정 선택 뒤 이어서 한다. 별도 production 생성은 현재 요구하지 않는다.
 
 2026-10-05 실제 GitHub Pages 설정 조회: 기존 공개 주소 `https://subsubt.github.io/game/`, source `main`의 `/`, build type `legacy`, status `built`. CP5 준비 코드는 별도 `codex/checkpoint5-google-sheets` 브랜치에 저장하므로 이 공개 source를 변경하지 않는다. 최종 통합 때 repo root를 공개하는 현재 방식을 그대로 사용하지 않고 allowlist 산출물로 전환한다.
 
@@ -84,11 +86,11 @@ node tools/register-google-encryption-key.mjs --dev
 
 이후 최신 Secret 준비 버전의 이름을 실제 조회하고 필요한 세 이름이 모두 있는지 확인한 뒤, 해당 준비 버전을 적용하고 CP5 소스를 배포한다. Google 계정 로그인/동의 화면은 본인이 직접 처리한다. 실제 계정 충돌·재승인·Drive 문서·Sheets 값·새 Worker 실행에서 자동 작업을 검증하고, 최종 운영 리소스가 준비되기 전에는 CP5 최종 PASS로 판정하지 않는다.
 
-## 6. 최종 운영은 별도 설정 게이트
+## 6. 현재 운영 결정과 과거 분리 설계
 
-기존 설계는 새 **production Firebase**, **production Worker**, **production Workspace OAuth client**를 개발 환경과 분리한다. `math3-dev` / `math3-cp3-dev`를 운영용으로 변경하지 않는다. 이번에는 새 production 리소스를 만들지 않았다.
+과거 설계는 별도 production Firebase/Worker/Workspace OAuth를 제안했다. 2026-10-07 사용자 결정으로 이 조건을 폐기하고 검증된 `math3-dev`/`math3-cp3-dev`/기존 OAuth를 그대로 공개 서비스에 사용한다. 이름·데이터·Secret 유지.
 
-사용자가 production Firebase 프로젝트와 Firestore 위치·무료/결제 정책을 확정해 생성하고, 익명 인증 및 필요시 Google provider를 설정해야 한다. 전용 서버 서비스 계정의 Firestore 권한/인증 저장, 새 Worker의 이름·실제 HTTPS 주소, 별도 OAuth Web client·그 Worker callback, 운영 Secret을 준비한다. **운영 Worker 주소가 아직 없으므로 운영 Redirect URI 값을 임의로 만들어 Console에 등록하지 않는다.** 실제 생성 후 프로젝트 ID·주소를 지침에 기록하고 CORS/Pages/Firebase authorized domain을 대조한다. 운영 학생 수집 조건은 기존 시스템 설계의 별도 게이트를 따른다.
+새 Console 설정/서비스계정/OAuth Client/Worker/결제는 요구하지 않는다. callback/Secret/Firestore deny Rules 유지. 공개 Pages domain은 이미 authorized됨을 조회했다. 현재 식별자·배포/복구는 프로젝트 지침과 CHECKPOINT5_RELEASE.md를 따른다.
 
 ## 공식 문서 확인(2026-10-05)
 
