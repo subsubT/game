@@ -1,14 +1,14 @@
 # 개발 상태 및 Checkpoint 인계
 
-## 2026-10-07 KST 현재 상태 — Pages 공개 통합 PASS, 실제 Google 공개 승인 검증 대기
+## 2026-10-08 KST 최종 판정 — Checkpoint 5 PASS — 전체 프로젝트 완료
 
 기존 `math3-dev` + `math3-cp3-dev` + 기존 Google OAuth를 그대로 실제 공개 서비스에 사용한다. 별도 production 생성·이름 변경·데이터 이전 없음. 이 사용자 결정이 아래 과거 분리 설계보다 우선한다.
 
-학생 https://subsubt.github.io/game/1math3.html · 교사 https://subsubt.github.io/game/teacher/ . main 병합·push·Pages Actions 게시 완료. run `37607043018` success, 공개 commit `de4d12e5969a69d2bbd3c0e0ea1a4e60792ae908`. Worker `ca7fbc93-8732-4a84-9b9e-764d6473d14f`, 기존 callback·Pages 고정 복귀·5분 cron 유지.
+학생 https://subsubt.github.io/game/1math3.html · 교사 https://subsubt.github.io/game/teacher/ . main 병합·push·Pages Actions 게시 완료. 최종 화면 run `37619924392` success, 공개 코드 `f7bd25a5198bc2083cb2217e6b91a1f20cf4b5bb`. Worker `ca7fbc93-8732-4a84-9b9e-764d6473d14f`, 기존 callback·Pages 고정 복귀·5분 cron 유지.
 
 공개 50문항 학생/교사·재시도·복구·복귀·학급 격리·Firestore 직접 거부·기존 게임 3개·자동 47개/Sheets Chromium/Functions·Worker Emulator 회귀 PASS. 새 화면/assets 정상, 민감 경로 404. 기존 게임 로직 재작성 없이 data favicon과 Pages 설정 경로만 보완했다. 문서/서버/Secret/시험 증거는 산출물 제외.
 
-Google 공개 Origin의 계정 선택은 일반 Chrome 팝업 자동 클릭 timeout으로 본인 클릭 요청 상태다. 개발 preview의 Google/Sheets PASS를 이번 공개 callback PASS로 대체하지 않는다. **Checkpoint 5 전체 최종 PASS 보류.** [현재 실검증](CHECKPOINT5_LIVE_EVIDENCE.md), [Pages](CHECKPOINT5_PAGES_PREPARATION.md), [배포·복구](CHECKPOINT5_RELEASE.md).
+2026-10-07 공개 Origin에서 실제 Google 로그인·연결 해제·재승인·Worker callback·Pages 복귀를 완료했다. 새 연결 시각 21:19:56 KST, 반복 동기화 완료 21:21:05 KST. 같은 교사·학급·Drive 파일, 학생 2명·완료 2회·문항 100행과 원장 전체 hash 불변, 비공개 이름 제외·중복 없음·나에게만 공개를 확인했다. Google 상태 조회 실패는 설정 미완료와 구분해 재시도하며, 연결 해제는 앱 안의 확인/취소 절차를 유지한다. 단위 47개·Sheets Chromium·공개 전체 흐름/기존 게임 최종 재검사 PASS. **Checkpoint 5 PASS — 전체 프로젝트 완료.** [실검증](CHECKPOINT5_LIVE_EVIDENCE.md), [Pages](CHECKPOINT5_PAGES_PREPARATION.md), [배포·복구·알려진 제한](CHECKPOINT5_RELEASE.md).
 
 ## 이하 2026-10-05 및 이전 개발 이력 (현재 지시/상태 아님)
 

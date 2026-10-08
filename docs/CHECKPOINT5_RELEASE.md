@@ -1,6 +1,6 @@
 # Checkpoint 5 운영·배포·복구
 
-2026-10-07 KST. 실제 Pages 게시·핵심 공개 검증 PASS. 공개 Origin Google 최종 검증은 사용자 클릭 대기로 **CP5 전체 최종 PASS 보류**. [실검증](CHECKPOINT5_LIVE_EVIDENCE.md), [Pages 배포](CHECKPOINT5_PAGES_PREPARATION.md).
+2026-10-08 KST: **Checkpoint 5 PASS — 전체 프로젝트 완료.** 2026-10-07 실제 Pages 학생·교사·Google OAuth/Sheets와 회귀·접근 통제를 통과했다. [실검증](CHECKPOINT5_LIVE_EVIDENCE.md), [Pages 배포](CHECKPOINT5_PAGES_PREPARATION.md).
 
 ## 운영 대상
 
@@ -33,6 +33,7 @@
 ## 복구
 
 - Pages: 직전 정상 `de4d12e5969a69d2bbd3c0e0ea1a4e60792ae908`의 allowlist workflow 재게시. 강제 push/reset 금지. artifact에는 원장·Secret이 없다.
+- 최종 공개 화면은 `f7bd25a5198bc2083cb2217e6b91a1f20cf4b5bb`/run `37619924392`. 조회 오류는 앱의 ‘연결 상태 다시 확인’으로 재시도하며, Google 연결 해제는 ‘자동 동기화 중지’ 확인을 거친다. 취소는 ‘계속 연결’이다.
 - Worker: 이전 `e9bc9633-db9c-457e-aeb6-cbc68f02664d`와 현재 실제 버전 조회 후 대상 복구. 이전 버전은 preview 복귀 vars이므로 공개 운영 복귀 위치도 대조한다. Secret은 출력하지 않는다.
 - 원장: 코드 rollback은 DB를 복구하지 않는다. 변경 대상만 비공개 백업으로 복원. 실제 데이터 삭제·덮어쓰기·권한 약화는 대상/이유 설명 후 확인.
 - Sheets: Google 장애는 원장 저장을 막지 않는다. 재승인 후 같은 파일에 다시 쓴다. 불확실 생성은 appProperties 검색, 중복 자동 삭제 금지.
@@ -40,8 +41,8 @@
 
 ## 제한과 시험 자료
 
-기존 Google Testing/Test user 정책 유지. 실제 두 번째 Google 계정, 7일 grant 만료 경과, 199회차 최대 규모/무료 quota 실측은 이전 검증에서 수행하지 않았다. 구현의 학급당 내보내기 회차·학생 각각 199개 한도는 유지된다.
+기존 Google Testing/Test user 정책 유지: Google 연동은 등록된 테스트 계정으로 검증했으며 일반 Google 계정 전체에 공개 승인된 앱으로 바꾸지 않았다. 미연결 교사는 Google 없이 사용할 수 있다. 실제 두 번째 Google 계정, 7일 grant 만료 경과, 199회차 최대 규모/무료 quota 실측은 수행하지 않았다. 구현의 학급당 내보내기 회차·학생 각각 199개 한도는 유지된다.
 
-기존 시험 자료는 삭제하지 않았다. 이번 합성 학급은 `CP5공개검증반`, `CP5격리검증반`, `규칙검증반`; 실제 API 검사는 `CP3A…`/`CP3B…`와 경합 fixture를 추가했다. 생성 익명 계정·OAuth state·학생/회차는 검사 이력으로 남긴다. 비공개 증거/백업은 `.cp5-test-artifacts/final/`, Git/Pages 제외.
+기존 시험 자료는 삭제하지 않았다. 이번 합성 학급은 `CP5공개검증반`, `CP5격리검증반`, `규칙검증반`; 실제 API 검사는 `CP3A…`/`CP3B…`와 경합 fixture를 추가했다. Google 실검증은 기존 `CP5일반검증반`의 학생 2명/회차 2개를 재사용했으며 해제 전 백업·재승인 후 원장 전체 불변을 확인했다. 최종 재검사의 동일 명칭 합성 학급도 남긴다. 생성 익명 계정·OAuth state·학생/회차는 검사 이력으로 남긴다. 비공개 증거/백업은 `.cp5-test-artifacts/final/`, Git/Pages 제외.
 
 도름스체크: 확인 30·미확인 5·해당 없음 1. 일부 Pages 헤더/정책/메타 권고와 미확인은 보안 보증이 아니다. 정적 파일의 `Access-Control-Allow-Origin: *`와 인증 Worker API는 다르다. Worker allowlist/CORS와 Firestore deny Rules는 실제 검사했다. 탐지된 apiKey는 Firebase 공개 config이며 Client Secret/서비스계정/token 노출은 발견되지 않았다.

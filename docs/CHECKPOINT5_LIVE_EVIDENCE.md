@@ -1,28 +1,38 @@
 # Checkpoint 5 공개 배포·실제 검증
 
-## 2026-10-07 KST 현재 판정
+## 2026-10-08 KST 최종 판정 (실제 통합 검사 2026-10-07)
 
-**Pages 게시 및 Google 외 공개 전체 흐름 PASS. 공개 Origin 실제 Google 로그인/승인/Sheets 재검증은 사용자 계정 선택 클릭 대기. CP5 전체 최종 PASS 보류.**
+**Checkpoint 5 PASS — 전체 프로젝트 완료. 실제 Pages의 학생·교사·Firebase·Worker·Google OAuth/Sheets 전체 통합, 회귀·접근 통제·Secret 제외 검증을 완료했다.**
 
 기존 `math3-dev` + `math3-cp3-dev` + 기존 OAuth Client를 그대로 실제 공개 서비스에 사용한다. 새 production 리소스/데이터 이전/Secret 변경 없음. 이전의 별도 production 요구는 과거 설계다.
 
-학생 https://subsubt.github.io/game/1math3.html · 교사 https://subsubt.github.io/game/teacher/ . Pages run `37607043018` success, 공개 commit `de4d12e5969a69d2bbd3c0e0ea1a4e60792ae908`. Worker `ca7fbc93-8732-4a84-9b9e-764d6473d14f`, callback 유지/Pages 고정 복귀/5분 cron. Firebase Pages domain 이미 authorized.
+학생 https://subsubt.github.io/game/1math3.html · 교사 https://subsubt.github.io/game/teacher/ . 최종 화면 Pages run [37619924392](https://github.com/subsubT/game/actions/runs/37619924392) success, 공개 코드 `f7bd25a5198bc2083cb2217e6b91a1f20cf4b5bb`. Worker `ca7fbc93-8732-4a84-9b9e-764d6473d14f`, callback 유지/Pages 고정 복귀/5분 cron. Firebase Pages domain 이미 authorized. 이후 문서·검증 도구 변경은 공개 산출물에 영향을 주지 않는다.
 
 | 검사 | 실제 결과 |
 |---|---|
 | 정적 의존성·제외 | 화면/assets 200·MIME 정상, 두 교사 URL 정상. allowlist 12개. docs/worker/functions/references/환경/증거/config 원본 404 |
-| 공개 학생·교사 Chromium | 실제 Pages 다운로드에서 승인→정규 50문항→서버 저장·학급/전체 순위, 응답 유실 재시도·새로고침 복원 PASS(173초). 복수 학급·승인·학생 목록·회차/50문항 상세·공개 설정·복구 키·학생 복귀 티켓·모바일 폭 PASS. Google 미연결 정상. 로컬 HTML route 대체 없음 |
+| 공개 학생·교사 Chromium | 실제 Pages 다운로드에서 승인→정규 50문항→서버 저장·학급/전체 순위, 응답 유실 재시도·새로고침 복원 PASS(173초), 상태 재시도 수정 후 재검사 PASS(109초). 복수 학급·승인·학생 목록·회차/50문항 상세·공개 설정·복구 키·학생 복귀 티켓·모바일 폭 PASS. Google 미연결 정상. 로컬 HTML route 대체 없음 |
 | 실제 Firestore 브라우저 | SDK 직접 읽기/쓰기 모두 permission-denied PASS(14초). 오래된 dashboard selector를 현재 select-class로 맞춰 재검사 |
 | 실제 Worker API | 500/490 서버 채점·타 교사/학생/학급 거부·점수 위조·인증/Origin·중복 재시도·순위/공개 토글·경합 PASS 2개(163초) |
 | 공개 Origin OAuth 공격 | launch replay·cookie 누락·consumed state·test-only 만료·임의 returnUrl·타 교사 Sheets API 거부 PASS. 만료 변경 대상은 이번 합성 state, 비공개 백업 후 검사 |
 | 기존 게임 3개 | 공개 시작·채점·콘솔 오류 없음 PASS(12초). 결과 저장/종료 전 닫아 기존 운영 점수 미작성. 최초 root favicon 404는 data favicon으로 제거 후 재배포 |
 | 자동/Emulator | 단위 47/47, Sheets Chromium 1/1, Functions fallback/Auth/Rules 1/1(128초), Worker REST/Sheets 1/1(9초), 교사→학생 Functions Chromium 1/1(196초), Worker dry-run PASS |
-| Worker 런타임 | 새로운 합성 익명 계정의 인증 요청 3개 정상. 60초 tail 이벤트 5개(200×3, 204×1, onboarding 403×1), 5xx/내부 오류 0. 원시 URL/query/body/token/log 저장 없음 |
+| Worker 런타임 | 새로운 합성 익명 계정의 인증 요청 3개 정상. 최종 60초 tail 이벤트 14개(200×8, 204×6), 5xx/내부 오류 0. 원시 URL/query/body/token/log 저장 없음 |
 | 자격증명 | tracked source·dist-pages credential patterns PASS. source map/서버/문서/증거/서비스계정/OAuth secret/token 공개 없음. Firebase 웹 apiKey는 공개 config |
 | 도름스체크 | 독립 비공개 경로 v0.3.1 detect/init/security scan 완료. 확인 30/미확인 5/해당 없음 1. 헤더·정책·메타 등 권고. 공개 Firebase apiKey는 Secret 노출 아님 |
-| 실제 Google 공개 Origin | 일반 Chrome 공개 teacher→Google로 돌아오기→기존 계정 선택 화면 도달. Google 팝업 자동 클릭 CDP timeout으로 사용자 계정 선택 요청. callback/Sheets PASS로 대신 기록하지 않음 |
+| 실제 Google 공개 Origin | 공개 teacher의 Google 로그인·기존 공간 복원·수동 sync 후 실제 연결 해제. 원장·학급·기존 파일 유지 및 연결 문서 제거 확인. 공개 teacher→동일 Google 계정 재승인→실제 Worker callback→공개 Pages 연결 완료 PASS. 연결 시각 `2026-10-07T12:19:56.692Z`, 반복 sync 시각 `2026-10-07T12:21:05.305Z`. 기존 teacherId·학급 전체·학생·회차 hash 불변, 같은 Drive 파일과 암호화 연결 구조 확인 |
+| 실제 Sheets 데이터·비공개 | Google UI ‘나에게만 공개’. 연결 전/재승인 후 XLSX 읽기 검사 모두 학생요약 2행·회차 2행·문항 100행, 각 500점·고유 문항 100개·비공개 테스트 이름 제외 PASS. 네 필수 탭/열과 빈 기본 시트 보존. 반복 sync 성공, 새 파일 생성 없음 |
+| Google 상태 오류·해제 확인 UI | 모의 503을 실제 Chromium에 주입해 설정 미완료로 오인하지 않음·학급 관리 계속·연결 상태 재확인으로 동일 파일 복구 PASS. 해제 확인 전/취소 시 revoke 0, 확인 시 revoke 1 PASS. 최종 공개 앱 내 확인창 표시/취소 및 연결 유지·콘솔 error 0 PASS |
 
-증거/백업/스크린샷/시험 자료는 `.cp5-test-artifacts/final/`에만 저장, Git/Pages 제외. 새 시험 학급/익명 계정/회차 삭제 없음. [복구·한도](CHECKPOINT5_RELEASE.md). 본인 클릭 뒤 공개 OAuth callback/동일 교사·학급·파일/중복 없는 sync/해제·재승인을 완료해야 `Checkpoint 5 PASS — 전체 프로젝트 완료`를 기록한다.
+증거/백업/스크린샷/시험 자료는 `.cp5-test-artifacts/final/`에만 저장, Git/Pages 제외. 새 시험 학급/익명 계정/회차 삭제 없음. Google 테스트 앱 경고의 ‘계속’은 본인이 직접 처리했으며 보호를 우회하지 않았다. [복구·한도](CHECKPOINT5_RELEASE.md).
+
+2026-10-08 중단 재개 후 공개 URL·의존성·민감 경로 제외·기존 3게임을 다시 검사해 PASS(10.5초). 재승인된 시험 학급을 다시 읽어 같은 연결·관리표와 class/students/sessions 전체 hash 불변을 확인했다. 공개 산출물 12개·tracked source 93개 credential 검사 PASS.
+
+### 공개 Google 증거와 최종 보완
+
+`public-google-baseline.json`은 해제 전 비공개 백업이다. `public-google-disconnected.json`과 `public-google-restored.json`은 자격증명 없이 보존 여부·새 연결 시각만 기록한다. 원장은 class/students/sessions 전체 canonical hash로 비교하며 Drive 파일 ID도 같다. `public-sheet-before.json`/`public-sheet-after.json`과 두 비공개 XLSX로 연결 전후 행 수·점수·중복·이름 제외를 검증했다. `teacher-public-google-pass.jpg`에 공개 교사 화면의 동기화 완료·학급 보존을 기록했다.
+
+검증 도구는 DB 응답 객체를 assertion 오류에 출력하지 않는다. 고정된 판정 이유만 출력하고 예기치 않은 인증/API 예외도 숨긴다. 자동 승인 검토의 오류 출력 우려를 수정한 후 실제 해제·재승인 판정이 통과했다. 기존 Google Testing 정책과 199회차 한도는 유지하며 아래 과거 preview 결과와 이번 공개 callback 결과를 구분한다.
 
 ## 이하 2026-10-05 개발 preview의 실제 Google PASS 이력
 

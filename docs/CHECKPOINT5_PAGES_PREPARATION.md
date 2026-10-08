@@ -1,6 +1,6 @@
 # CP5 실제 GitHub Pages 배포와 검증
 
-2026-10-07 KST. 학생·교사 게시와 핵심 공개 흐름 PASS. 실제 Google 공개 Origin 검증은 사용자 클릭 대기이며 CP5 전체 최종 PASS는 보류한다.
+2026-10-08 KST 최종 판정: **Checkpoint 5 PASS — 전체 프로젝트 완료.** 2026-10-07 학생·교사 게시와 공개 Origin 전체 흐름, 실제 Google OAuth callback·Sheets 재승인/반복 동기화까지 통과했다.
 
 ## 현재 운영 결정
 
@@ -15,6 +15,8 @@
 - 기존 수동 `.github/workflows/pages.yml` 재사용. push는 자동 배포하지 않는다. `gh workflow run pages.yml --ref main`으로 빌드·credential 검사·allowlist artifact·deploy를 실행한다.
 - 첫 배포: [37605881985](https://github.com/subsubT/game/actions/runs/37605881985), `facd9b74dae14b72a503a5af859b334819b1f632`, success.
 - favicon 보완 배포: [37607043018](https://github.com/subsubT/game/actions/runs/37607043018), `de4d12e5969a69d2bbd3c0e0ea1a4e60792ae908`, success.
+- Google 조회 재시도 배포: [37619261000](https://github.com/subsubT/game/actions/runs/37619261000), `37fe36407b1107ceb9a00bc7c61c460b766fb4e4`, success.
+- 최종 화면·앱 내 해제 확인 배포: [37619924392](https://github.com/subsubT/game/actions/runs/37619924392), `f7bd25a5198bc2083cb2217e6b91a1f20cf4b5bb`, success. 이후 문서/시험 도구는 public artifact에 포함되지 않는다.
 - 학생: https://subsubt.github.io/game/1math3.html
 - 교사: https://subsubt.github.io/game/teacher/ 및 https://subsubt.github.io/game/teacher/index.html
 - Worker: `ca7fbc93-8732-4a84-9b9e-764d6473d14f`; 5분 cron 유지. 기존 callback 유지, 고정 복귀 위치만 공개 교사 화면으로 변경.
@@ -46,7 +48,8 @@ index/1math1 게임 로직은 그대로다. HTML의 빈 data favicon으로 도�
 - 실제 Pages 다운로드로 학생 50문항·교사 승인·결과/학급·전체 순위·응답 유실 재시도·새로고침·복수 학급·공개 설정·복구 키·학생 복귀 티켓 PASS. Pages 요청을 로컬 HTML로 대체하지 않았다.
 - Google 없는 교사 정상. 타 교사/학급 거부·점수 위조·요청 경합·Firestore 브라우저 직접 읽기/쓰기 거부 PASS.
 - 공개 Origin OAuth launch/state 재사용·cookie 누락·만료·임의 returnUrl 거부 PASS.
-- 실제 Google 로그인/승인/callback/Sheets 공개 화면은 사용자 계정 선택 클릭 뒤 계속한다. 개발 preview의 Google PASS를 이번 공개 Origin PASS로 대신하지 않는다.
+- 실제 공개 teacher→Google 로그인·기존 공간 복원→연결 해제→동일 계정 재승인→Worker callback→고정 Pages 복귀 PASS. 같은 teacherId/학급/파일·원장 hash 불변, 반복 sync·학생요약 2행/회차 2행/문항 100행·중복 없음·비공개 이름 제외·나에게만 공개 PASS.
+- 최종 Google 조회 실패/재시도와 해제 확인/취소 Chromium PASS. 공개 전체 학생·교사 및 기존 3게임 재검사 PASS. 공개 콘솔 error 0.
 
 Pages 설정·기존 HTML·Worker 설정/버전 백업은 Git 제외 `.cp5-test-artifacts/final/`에 있다. 직전 정상 workflow commit을 수동 재배포하면 복구 가능하다. 기존 데이터·Rules·Secret은 변경/삭제하지 않았다.
 

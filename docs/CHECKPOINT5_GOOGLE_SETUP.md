@@ -1,6 +1,6 @@
 # Checkpoint 5 — Google 설정 이력과 현재 운영 대상
 
-2026-10-07 현재 운영 결정: 기존 `math3-dev`/`math3-cp3-dev`/현재 OAuth Client를 그대로 공개 서비스에 사용한다. Pages 게시 완료, Worker 고정 복귀는 공개 교사 화면이다. 새 production/Secret 설정은 필요 없다. 아래 2026-10-05 설정·preview 경로는 과거 이력이다.
+2026-10-08 최종 판정: **Checkpoint 5 PASS — 전체 프로젝트 완료.** 기존 `math3-dev`/`math3-cp3-dev`/현재 OAuth Client를 그대로 공개 서비스에 사용한다. 실제 Pages callback·동일 파일 복원·반복 Sheets 동기화 완료. Worker 고정 복귀는 공개 교사 화면이다. 새 production/Secret 설정은 필요 없다. 아래 2026-10-05 설정·preview 경로는 과거 이력이다. [현재 검증](CHECKPOINT5_LIVE_EVIDENCE.md).
 
 2026-10-05. **실제 Google 개발 통합 PASS. 실제 연결 해제/revoke·재승인·같은 파일 복원까지 완료했다.** 최신 Worker `e9bc9633-db9c-457e-aeb6-cbc68f02664d`의 근거는 [실제 검증 기록](CHECKPOINT5_LIVE_EVIDENCE.md)에 있다. [운영 Pages 설정 조건](CHECKPOINT5_PAGES_PREPARATION.md)은 남았다. 아래 절차는 설정 이력이며 다시 실행하지 않는다. 개발 Firebase/Worker를 운영으로 승격하지 않는다. Secret 값이나 OAuth JSON을 채팅에 보내지 않는다.
 

@@ -1,5 +1,7 @@
 # 수학 별 모으기 · 1math3
 
+2026-10-08: **Checkpoint 5 PASS — 전체 프로젝트 완료.** 실제 공개 학생·교사·Google OAuth/Sheets 전체 통합과 회귀 검증 완료.
+
 학생: https://subsubt.github.io/game/1math3.html
 
 교사: https://subsubt.github.io/game/teacher/
@@ -7,6 +9,8 @@
 교사는 관리 공간을 만들고 한 번 표시되는 복구 키를 안전하게 보관한 뒤 학급을 만든다. 학생은 참여 코드로 신청하고 교사 승인을 받으면 정규 50문항 기록 도전을 시작한다. 서버에서 기록과 순위를 확정한다. 기기를 바꾼 학생은 교사가 발급하는 10분 유효 일회용 복귀 티켓을 사용한다.
 
 Google 연결은 선택 사항이다. 미연결 상태에서도 학급 관리와 게임 기록은 정상 작동한다. 연결한 교사는 비공개 Sheets 관리표를 생성/동기화하며 Google 문제가 생겨도 게임 원장은 계속 저장된다. 공개 순위에는 별명과 최고점만 표시된다.
+
+현재 Google 연동은 기존 OAuth Testing의 등록된 테스트 계정으로 이용한다. 관리표 내보내기는 학급당 학생·회차 각각 199개까지다. 연결 조회 실패 시 ‘연결 상태 다시 확인’으로 재시도한다. 연결 해제는 확인 후 자동 동기화만 중지하며 학습 기록과 기존 관리표는 남는다.
 
 기존 Firebase `math3-dev`, Worker `math3-cp3-dev`, 기존 Google OAuth 설정을 공개 서비스에 사용한다. 새 production 환경이나 데이터 이전은 하지 않는다. 기존 게임은 [홈](https://subsubt.github.io/game/), [1math1](https://subsubt.github.io/game/1math1.html), [1math2](https://subsubt.github.io/game/1math2.html)에서 계속 실행된다.
 
