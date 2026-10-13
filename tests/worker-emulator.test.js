@@ -30,7 +30,7 @@ test('Worker CP3 handlers preserve approval, server scoring, ranking, retries an
     const space = await call(teacher, 'createTeacherSpace', { requestId: id() });
     assert.ok(space.recoveryKey);
     const cls = await call(teacher, 'createClass', { privateLabel: 'Worker반', requestId: id() });
-    assert.match(cls.code, /^[A-HJ-NP-Z2-9]{8}$/);
+    assert.match(cls.code, /^[0-9]{4}$/);
     assert.equal((await call(student, 'requestJoin', { code: cls.code, privateName: '학생', requestId: id() })).status, 'pending');
     await assert.rejects(call(student, 'startSession', { gameId: '1math3', mode: 'regular', requestId: id() }));
     await assert.rejects(call(outsider, 'listPendingStudents', { classId: cls.classId }));

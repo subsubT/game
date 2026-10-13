@@ -110,7 +110,7 @@ test('regular record challenge requires mock class approval and nickname is safe
   const store = new Map(), storage = { getItem: k => store.get(k) ?? null, setItem: (k,v) => store.set(k,v) };
   const svc = new MockGameService(storage);
   await assert.rejects(svc.startSession('1math3', { mode: 'regular' }), /PENDING_APPROVAL/);
-  const join = await svc.joinClass('MATH1234', '  학생\u0000가나다라마바사아자차카타파  ');
+  const join = await svc.joinClass('0123', '  학생\u0000가나다라마바사아자차카타파  ');
   assert.equal(join.status, 'pending'); assert.equal(svc.memory.approved, false); assert.equal(Array.from(svc.memory.nickname).length, 12);
   await svc.approveDemo(); assert.equal(svc.memory.approved, true);
   assert.equal((await svc.startSession('1math3', { mode: 'regular', seed: 44 })).mode, 'regular');

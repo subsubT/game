@@ -34,7 +34,7 @@ test('teacher approval and a full official round work in Chromium', { timeout: 2
     await t.getByRole('button', { name: '학급 만들기' }).click();
     await t.locator('.code').waitFor();
     const code = (await t.locator('.code').textContent()).trim();
-    assert.match(code, /^[A-HJ-NP-Z2-9]{8}$/);
+    assert.match(code, /^[0-9]{4}$/);
     await t.getByLabel('비공개 학급 이름').fill('두 번째 반');
     await t.getByRole('button', { name: '학급 만들기' }).click();
     await t.getByRole('button', { name: /브라우저 검증반/ }).click();

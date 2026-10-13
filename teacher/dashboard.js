@@ -30,6 +30,7 @@ function errorText(error) {
   if (code.includes('FORBIDDEN') || code.includes('PERMISSION_DENIED')) return '이 관리 공간에 접근할 수 없습니다. 복구가 필요하면 복구 키를 사용하세요.';
   if (code.includes('AUTH') || code.includes('UNAUTHENTICATED')) return '인증이 만료되었습니다. 화면을 새로고침해 다시 연결하세요.';
   if (code.includes('RATE_LIMITED') || code.includes('RESOURCE_EXHAUSTED')) return '요청이 너무 많습니다. 잠시 후 다시 시도하세요.';
+  if (code === 'JOIN_CODE_BUSY') return '참여 코드 발급이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.';
   if (code.includes('INVALID_NAME')) return '학급 이름을 확인해 주세요.';
   if (code.includes('NOT_FOUND')) return '해당 자료를 찾을 수 없습니다. 새로고침해 주세요.';
   if (code.includes('NETWORK') || code.includes('FETCH')) return '네트워크 연결을 확인하고 다시 시도하세요.';
@@ -140,6 +141,11 @@ async function refreshClasses(preferred) {
 async function loadClass() {
   const id=state.selected, version=++state.loadVersion;
   app.innerHTML='<p class="loading">학급 자료를 불러오는 중…</p>';
+  if (!/^[0-9]{4}$/.test(selectedClass()?.code || '')) {
+    const updated = await call('ensureClassJoinCode', {classId:id});
+    if(version!==state.loadVersion||id!==state.selected)return;
+    state.classes=state.classes.map(c=>c.classId===id?{...c,code:updated.code}:c);
+  }
   const [pending,students,sessions,board]=await Promise.all([
     call('listPendingStudents',{classId:id}),call('listClassStudents',{classId:id}),
     call('listClassSessions',{classId:id,gameId:'1math3'}),call('getTeacherLeaderboard',{classId:id,seasonId:state.season}),refreshSheets()

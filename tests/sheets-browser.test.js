@@ -2,17 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolve,extname } from 'node:path';
+import { createHash,createCipheriv,randomBytes } from 'node:crypto';
 import { chromium } from 'playwright';
 import { handleRequest } from '../worker/src/index.js';
 import { createHandlers } from '../worker/src/generated-handlers.js';
 import { MemoryDb,fixtureEnv,FakeGoogle } from './sheets-fakes.js';
 
-test('Chromium teacher Google opt-in preserves uid/classes, handles Sheets failure, reconnects and disconnects', {timeout:90000}, async()=>{
+test('Chromium upgrades a legacy class to four digits and preserves Google opt-in, classes and Sheets', {timeout:90000}, async()=>{
   const root=resolve(import.meta.dirname,'..'),env=fixtureEnv(),db=new MemoryDb(),google=new FakeGoogle();
   let mockTime=Date.now(),failStatusOnce=false;
   const handlers=createHandlers(db,env.MATH3_SERVER_SECRET);
   const space=await handlers.createTeacherSpace({requestId:crypto.randomUUID()},'browser-teacher');
   const cls=await handlers.createClass({privateLabel:'선택 연동반',requestId:crypto.randomUUID()},'browser-teacher');
+  const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',createHash('sha256').update(env.MATH3_SERVER_SECRET).digest(),iv);
+  const encrypted=Buffer.concat([cipher.update('ABCD2345','utf8'),cipher.final()]);
+  db.rows.get(`classes/${cls.classId}`).codeCipher=[iv,cipher.getAuthTag(),encrypted].map(part=>part.toString('base64url')).join('.');
   const worker=new URL(env.GOOGLE_REDIRECT_URI).origin,origin='https://subsubt.github.io';
   const config={apiKey:'mock',projectId:'math3-dev',authDomain:'math3-dev.firebaseapp.com',appId:'mock',workerApiOrigin:worker,enableGoogleProvider:true};
   const browser=await chromium.launch({headless:true,executablePath:'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'});
@@ -45,6 +49,8 @@ test('Chromium teacher Google opt-in preserves uid/classes, handles Sheets failu
     });
     await page.goto(env.GOOGLE_DASHBOARD_URL);
     await page.getByText('연결 안 됨',{exact:true}).waitFor();
+    assert.match((await page.locator('.code').textContent()).trim(),/^[0-9]{4}$/);
+    assert.equal([...db.rows.keys()].filter(key=>key.startsWith('joinCodeBackups/')).length,1);
     await page.getByRole('tab',{name:/승인 대기/}).click();await page.getByText('참여 신청을 기다리는 학생이 없습니다.').waitFor();
     await page.getByRole('button',{name:'Google 연결',exact:true}).click();
     try { await page.getByText('Google 연결이 완료되었습니다.',{exact:false}).waitFor(); }

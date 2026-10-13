@@ -2,12 +2,12 @@
 import { ApiError } from './error.js';
 import { randomBytes, createHash, createHmac, createCipheriv, createDecipheriv, timingSafeEqual } from 'node:crypto';
 import { GAME, buildSession, publicQuestion, evaluateStep, skipQuestion, summarize, questionExplanation } from '../../src/games/1math3/core.js';
+import { generateJoinCode } from '../../src/server/join-code.js';
 
 
-export const handlerNames = Object.freeze(["createTeacherSpace","recoverTeacherSpace","createClass","listClasses","listPendingStudents","listClassSessions","getSessionDetails","setClassGlobalParticipation","approveStudent","listClassStudents","getTeacherLeaderboard","issueStudentReturnTicket","redeemStudentReturnTicket","detachStudentDevice","requestJoin","getStudentStatus","startSession","getSession","submitAnswer","finishSession","setGlobalParticipation","getLeaderboard"]);
+export const handlerNames = Object.freeze(["createTeacherSpace","recoverTeacherSpace","createClass","ensureClassJoinCode","listClasses","listPendingStudents","listClassSessions","getSessionDetails","setClassGlobalParticipation","approveStudent","listClassStudents","getTeacherLeaderboard","issueStudentReturnTicket","redeemStudentReturnTicket","detachStudentDevice","requestJoin","getStudentStatus","startSession","getSession","submitAnswer","finishSession","setGlobalParticipation","getLeaderboard"]);
 export function createHandlers(db, secret) {
   if (!secret) throw new Error('MATH3_SERVER_SECRET is required');
-  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const aliasWords = ['초록별', '노란달', '푸른별', '반짝꽃', '은하수', '새싹별', '달빛곰', '구름별'];
   const hash = value => createHash('sha256').update(value).digest('hex');
   const digest = value => createHmac('sha256', secret).update(value).digest('hex');
@@ -18,7 +18,15 @@ export function createHandlers(db, secret) {
   function fields(data, allowed) { object(data); for (const key of Object.keys(data)) if (!allowed.includes(key)) fail('INVALID_REQUEST'); return data; }
   function str(value, max = 100) { if (typeof value !== 'string' || value.length > max || !value.length) fail('INVALID_REQUEST'); return value; }
   function requestId(data) { return str(data.requestId, 80); }
-  function codeOf(value) { const code = str(value, 12).replace(/-/g, '').toUpperCase(); if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) fail('JOIN_UNAVAILABLE'); return code; }
+  function codeOf(value) { const code = str(value, 12).normalize('NFKC').trim().replace(/-/g, '').toUpperCase(); if (!/^(?:[0-9]{4}|[A-HJ-NP-Z2-9]{8})$/.test(code)) fail('JOIN_UNAVAILABLE'); return code; }
+  class JoinCodeCollision extends Error {}
+  async function allocateJoinCode(action) {
+    for (let attempt = 0; attempt < 16; attempt++) {
+      try { return await db.runTransaction(action); }
+      catch (error) { if (!(error instanceof JoinCodeCollision)) throw error; }
+    }
+    fail('JOIN_CODE_BUSY');
+  }
   function nameOf(value) { const name = String(value || '').normalize('NFC').trim(); if ([...name].length > 12 || /[\p{Cc}\p{Cf}]/u.test(name)) fail('INVALID_NAME'); return name; }
   function codeCrypt(value, decrypt = false) {
     const key = createHash('sha256').update(secret).digest();
@@ -154,15 +162,32 @@ export function createHandlers(db, secret) {
     const teacherId = await teacher(uid), privateLabel = nameOf(data.privateLabel);
     if (!privateLabel) fail('INVALID_NAME');
     const op = opRef(uid, 'createClass', data.requestId), fp = hash(JSON.stringify([privateLabel]));
-    return db.runTransaction(async tx => {
+    return allocateJoinCode(async tx => {
       const prior = checkOp(await tx.get(op), fp); if (prior) return prior;
-      const classId = randomId(), code = Array.from({ length: 8 }, () => alphabet[randomBytes(1)[0] % alphabet.length]).join(''), codeDigest = digest(code);
+      const classId = randomId(), code = generateJoinCode(randomBytes), codeDigest = digest(code);
       const codeRef = db.doc(`joinCodes/${codeDigest}`);
-      if ((await tx.get(codeRef)).exists) fail('REQUEST_CONFLICT');
+      if ((await tx.get(codeRef)).exists) throw new JoinCodeCollision();
       const result = { classId, code, privateLabel, globalOptIn: true };
       tx.create(db.doc(`classes/${classId}`), { ownerTeacherId: teacherId, privateLabel, status: 'active', joinEnabled: true, globalOptIn: true, codeCipher: codeCrypt(code), codeVersion: 1, createdAt: now() });
       tx.create(codeRef, { classId, codeVersion: 1, active: true, expiresAt: new Date(Date.now() + 30 * 86400000).toISOString() });
       tx.create(op, { fingerprint: fp, result }); return result;
+    });
+  });
+  const ensureClassJoinCode = call(async (data, uid) => {
+    fields(data, ['classId']); const { ref, teacherId } = await ownedClass(uid, data.classId);
+    return allocateJoinCode(async tx => {
+      const snap = await tx.get(ref), cls = snap.data();
+      if (!snap.exists || cls.ownerTeacherId !== teacherId) fail('FORBIDDEN');
+      const oldCode = codeCrypt(cls.codeCipher, true);
+      if (/^[0-9]{4}$/.test(oldCode)) return { classId: ref.id, code: oldCode };
+      const code = generateJoinCode(randomBytes), codeDigest = digest(code), codeRef = db.doc(`joinCodes/${codeDigest}`);
+      if ((await tx.get(codeRef)).exists) throw new JoinCodeCollision();
+      // Atomic rollback record before changing only the displayed code. Existing
+      // index/version, pending applications, students and learning records stay valid.
+      tx.create(db.doc(`joinCodeBackups/${ref.id}:${codeDigest}`), { codeCipher: cls.codeCipher, codeVersion: cls.codeVersion, oldCodeDigest: digest(oldCode), newCodeDigest: codeDigest, createdAt: now() });
+      tx.create(codeRef, { classId: ref.id, codeVersion: cls.codeVersion, active: true, expiresAt: new Date(Date.now() + 30 * 86400000).toISOString() });
+      tx.update(ref, { codeCipher: codeCrypt(code) });
+      return { classId: ref.id, code };
     });
   });
   const listClasses = call(async (data, uid) => {
@@ -293,7 +318,7 @@ export function createHandlers(db, secret) {
       const [joined, old, codeSnap] = await Promise.all([tx.get(db.doc(`studentBindings/${uid}`)), tx.get(pending), tx.get(idx)]);
       if (joined.exists && joined.data().active) fail('FORBIDDEN');
       if (old.exists) {
-        if (old.data().codeDigest !== digest(code)) fail('FORBIDDEN');
+        if (old.data().codeDigest !== digest(code) && (!codeSnap.exists || !codeSnap.data().active || codeSnap.data().expiresAt <= now() || codeSnap.data().classId !== old.data().classId)) fail('FORBIDDEN');
         return { status: 'pending', checkMark: old.data().checkMark };
       }
       if (!codeSnap.exists || !codeSnap.data().active || codeSnap.data().expiresAt <= now()) fail('JOIN_UNAVAILABLE');
@@ -481,5 +506,5 @@ export function createHandlers(db, secret) {
     return { boardKey: `${key}:${data.scope}`, scope: data.scope, asOf: now(), projectionVersion: 1, entries, nextCursor, myEntry, rankStatus: 'ready' };
   });
   
-  return { createTeacherSpace, recoverTeacherSpace, createClass, listClasses, listPendingStudents, listClassSessions, getSessionDetails, setClassGlobalParticipation, approveStudent, listClassStudents, getTeacherLeaderboard, issueStudentReturnTicket, redeemStudentReturnTicket, detachStudentDevice, requestJoin, getStudentStatus, startSession, getSession, submitAnswer, finishSession, setGlobalParticipation, getLeaderboard };
+  return { createTeacherSpace, recoverTeacherSpace, createClass, ensureClassJoinCode, listClasses, listPendingStudents, listClassSessions, getSessionDetails, setClassGlobalParticipation, approveStudent, listClassStudents, getTeacherLeaderboard, issueStudentReturnTicket, redeemStudentReturnTicket, detachStudentDevice, requestJoin, getStudentStatus, startSession, getSession, submitAnswer, finishSession, setGlobalParticipation, getLeaderboard };
 }

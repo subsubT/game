@@ -37,7 +37,7 @@ test('live Firebase and Worker teacher-to-student browser flow', { skip: process
     await t.getByRole('button', { name: '학급 만들기' }).click();
     await t.locator('.code').waitFor();
     const code = (await t.locator('.code').textContent()).trim();
-    assert.match(code, /^[A-HJ-NP-Z2-9]{8}$/);
+    assert.match(code, /^[0-9]{4}$/);
     await t.getByText('연결 안 됨', {exact:true}).waitFor();
     await t.getByLabel('비공개 학급 이름').fill('CP5격리검증반');
     await t.getByRole('button', { name: '학급 만들기' }).click();
