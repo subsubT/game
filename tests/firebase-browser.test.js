@@ -60,7 +60,7 @@ test('teacher approval and a full official round work in Chromium', { timeout: 2
     await s.reload();
     await s.getByText('내 이름: 교사변경이름',{exact:true}).waitFor();
     await s.getByRole('button', { name: '기록 도전 시작' }).click();
-    await s.getByRole('button', { name: '시작하기' }).click();
+    await s.getByRole('button', { name: '시작하기', exact: true }).click();
     try { await s.getByText('1 / 50').waitFor(); }
     catch (error) { throw new Error(`Game did not start: ${(await s.locator('body').innerText()).slice(0, 500)}`, { cause: error }); }
 

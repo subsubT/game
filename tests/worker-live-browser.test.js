@@ -27,6 +27,8 @@ test('live Firebase and Worker teacher-to-student browser flow', { skip: process
   }
   const t = await teacher.newPage(), s = await student.newPage();
   const errors = [];
+  const apiFailures=[];
+  s.on('response',async r=>{if(r.url().startsWith('https://math3-cp3-dev.subsubt-math3-dev.workers.dev/api/')&&r.status()>=400){let code;try{code=(await r.json()).error?.code;}catch{}apiFailures.push({operation:new URL(r.url()).pathname,status:r.status(),code});}});
   for (const page of [t, s]) page.on('pageerror', error => errors.push(error.message));
   try {
     await t.goto(`${site}/teacher/index.html`);
@@ -56,6 +58,45 @@ test('live Firebase and Worker teacher-to-student browser flow', { skip: process
     await t.getByRole('button',{name:'이름 저장',exact:true}).click();
     await t.getByText('학생 이름을 변경했습니다.').waitFor();
     await t.locator('#student-rows').getByText('교사변경이름',{exact:true}).waitFor();
+    await t.getByRole('button',{name:/CP5격리검증반/}).click();
+    await t.getByRole('tab',{name:/학생 0/}).click();
+    await t.getByText('소속 학생이 없습니다.').waitFor();
+    await t.getByRole('button',{name:/CP5공개검증반/}).click();
+    await s.reload();
+    await s.getByText('내 이름: 교사변경이름',{exact:true}).waitFor();
+    await s.getByRole('button',{name:'기록 도전 시작'}).click();
+    await s.getByRole('button', { name: '시작하기', exact: true }).click();
+    try{await s.getByText('1 / 50').waitFor();}catch{throw Error(JSON.stringify({stage:'game-start',messages:await s.locator('.error').allTextContents(),apiFailures}));}
+
+    for (let index = 1; index <= 50; index++) {
+      await s.getByRole('button', { name: '문제 건너뛰기' }).click();
+      if (index === 1) {
+        let resolveLost;
+        const lost = new Promise(resolve => { resolveLost = resolve; });
+        const dropAcknowledgement = async route => { await route.fetch(); await route.abort(); resolveLost(); };
+        await s.route('**/submitAnswer', dropAcknowledgement);
+        await s.getByRole('button', { name: '건너뛰기 확정' }).click();
+        await lost;
+        await s.unroute('**/submitAnswer', dropAcknowledgement);
+        await s.getByText('저장 상태를 확인하지 못했어요. 다시 눌러 주세요.').waitFor();
+      }
+      await s.getByRole('button', { name: '건너뛰기 확정' }).click();
+      await s.getByText('건너뛰었어요.').waitFor();
+      if (index === 1) { await s.reload(); await s.getByText('건너뛰었어요.').waitFor(); }
+      await s.getByRole('button', { name: index === 50 ? '결과 보기' : '다음 문제' }).click();
+      if (index % 10 === 0 && index < 50) await s.getByRole('button', { name: '계속 풀기' }).click();
+    }
+    await s.getByText('서버 저장 완료').waitFor();
+    await s.getByText('순위 반영 완료').waitFor();
+    await s.getByRole('tab', { name: '우리 반 순위' }).click();
+    await s.locator('.rank-row').first().waitFor();
+    assert.match(await s.locator('.rank-row').first().textContent(), /0점/);
+    await s.getByRole('tab', { name: '전체 순위' }).click();
+    await s.locator('.rank-row').first().waitFor();
+    await s.locator('.rank-row.me').getByText('0점', {exact:true}).waitFor();
+    await t.getByRole('button', {name:'새로고침'}).click();
+    await t.getByRole('tab', { name: /학생 기록/ }).click();
+    await t.getByLabel('학생 선택').selectOption({ index: 1 });
     await t.getByRole('button', { name: /1번째 기록/ }).click();
     await t.getByText('문항별 상세').waitFor();
     assert.equal(await t.locator('.question').count(), 50);

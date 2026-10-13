@@ -20,6 +20,7 @@ const uidOf = request => request.auth?.uid || fail('AUTH_REQUIRED');
 const object = value => value && typeof value === 'object' && !Array.isArray(value) ? value : fail('INVALID_REQUEST');
 function fields(data, allowed) { object(data); for (const key of Object.keys(data)) if (!allowed.includes(key)) fail('INVALID_REQUEST'); return data; }
 function str(value, max = 100) { if (typeof value !== 'string' || value.length > max || !value.length) fail('INVALID_REQUEST'); return value; }
+function documentId(value) { const id = str(value, 80); if (!/^[A-Za-z0-9_-]+$/.test(id)) fail('INVALID_REQUEST'); return id; }
 function requestId(data) { return str(data.requestId, 80); }
 function codeOf(value) { const code = str(value, 12).normalize('NFKC').trim().replace(/-/g, '').toUpperCase(); if (!/^(?:[0-9]{4}|[A-HJ-NP-Z2-9]{8})$/.test(code)) fail('JOIN_UNAVAILABLE'); return code; }
 class JoinCodeCollision extends Error {}
@@ -70,7 +71,7 @@ async function teacher(uid) {
   return snap.data().teacherId;
 }
 async function ownedClass(uid, classId) {
-  const teacherId = await teacher(uid), ref = db.doc(`classes/${str(classId, 80)}`), snap = await ref.get();
+  const teacherId = await teacher(uid), ref = db.doc(`classes/${documentId(classId)}`), snap = await ref.get();
   if (!snap.exists || snap.data().ownerTeacherId !== teacherId) fail('FORBIDDEN');
   return { ref, data: snap.data(), teacherId };
 }
@@ -212,7 +213,7 @@ export const listClassSessions = call(async (data, uid) => {
 });
 export const getSessionDetails = call(async (data, uid) => {
   fields(data, ['classId', 'sessionId']); const { ref } = await ownedClass(uid, data.classId);
-  const snap = await ref.collection('sessions').doc(str(data.sessionId, 80)).get();
+  const snap = await ref.collection('sessions').doc(documentId(data.sessionId)).get();
   if (!snap.exists) fail('NOT_FOUND');
   const s = unpackSession(snap.data()), studentSnap = await ref.collection('students').doc(s.studentId).get();
   return { result: summarize(s), seasonId: s.seasonId, student: { privateName: studentSnap.data()?.privateName || '', classAlias: studentSnap.data()?.classAlias || '' }, answers: s.questions.filter(q => q.status === 'answered').map(q => ({ index: q.index, typeId: q.typeId, subtype: q.subtype, operands: q.operands, answer: q.answer, firstResponse: q.firstResponse, firstCorrect: q.firstCorrect, skipped: Boolean(q.skipped) })) };
@@ -250,7 +251,7 @@ export const setClassGlobalParticipation = call(async (data, uid) => {
   });
 });
 export const approveStudent = call(async (data, uid) => {
-  fields(data, ['classId', 'studentId']); const { ref } = await ownedClass(uid, data.classId), sid = str(data.studentId, 80);
+  fields(data, ['classId', 'studentId']); const { ref } = await ownedClass(uid, data.classId), sid = documentId(data.studentId);
   return db.runTransaction(async tx => {
     const sref = ref.collection('students').doc(sid), snap = await tx.get(sref);
     if (!snap.exists || !['pending', 'active'].includes(snap.data().status)) fail('NOT_FOUND');
@@ -269,7 +270,7 @@ export const listClassStudents = call(async (data, uid) => {
 });
 export const renameStudent = call(async (data, uid) => {
   fields(data, ['classId', 'studentId', 'privateName', 'requestId']); requestId(data);
-  const { ref } = await ownedClass(uid, data.classId), sid = str(data.studentId, 80), privateName = nameOf(str(data.privateName, 100));
+  const { ref } = await ownedClass(uid, data.classId), sid = documentId(data.studentId), privateName = nameOf(str(data.privateName, 100));
   if (!privateName) fail('INVALID_NAME');
   const sref = ref.collection('students').doc(sid), op = opRef(uid, 'renameStudent', data.requestId), fp = hash(JSON.stringify([data.classId, sid, privateName]));
   return db.runTransaction(async tx => {
@@ -284,7 +285,7 @@ export const renameStudent = call(async (data, uid) => {
 });
 export const removeStudent = call(async (data, uid) => {
   fields(data, ['classId', 'studentId', 'requestId']); requestId(data);
-  const { ref } = await ownedClass(uid, data.classId), sid = str(data.studentId, 80), sref = ref.collection('students').doc(sid);
+  const { ref } = await ownedClass(uid, data.classId), sid = documentId(data.studentId), sref = ref.collection('students').doc(sid);
   const op = opRef(uid, 'removeStudent', data.requestId), fp = hash(JSON.stringify([data.classId, sid]));
   return db.runTransaction(async tx => {
     const [prior, snap, sheet] = await Promise.all([tx.get(op), tx.get(sref), tx.get(db.doc(`sheetExports/${data.classId}`))]);
@@ -322,7 +323,7 @@ export const getTeacherLeaderboard = call(async (data, uid) => {
 });
 export const issueStudentReturnTicket = call(async (data, uid) => {
   fields(data, ['classId', 'studentId']); const { ref } = await ownedClass(uid, data.classId);
-  const studentId = str(data.studentId, 80), snap = await ref.collection('students').doc(studentId).get();
+  const studentId = documentId(data.studentId), snap = await ref.collection('students').doc(studentId).get();
   if (!snap.exists || snap.data().status !== 'active') fail('NOT_FOUND');
   const ticket = randomBytes(16).toString('base64url'), ticketHash = digest(ticket);
   await db.doc(`studentReturnTickets/${ticketHash}`).create({ classId: data.classId, studentId, expiresAt: new Date(Date.now() + 600000).toISOString(), usedAt: null });

@@ -424,7 +424,7 @@ function rankContent() {
   const season = ui.board.boardKey.split(':')[3] || currentSeason();
   return `<p class="pill">1math3 · ${season} · ${live ? '확정 기록' : '예시 데이터'}</p><div>${ui.board.entries.length ? ui.board.entries.map(r => `<div class="rank-row ${r.isMe ? 'me' : ''}"><strong>${r.rank}위</strong><span>${esc(r.displayAlias)}${r.isMe ? ' (나)' : ''}</span><span>${r.score}점</span></div>`).join('') : '<p class="muted">아직 순위 기록이 없어요.</p>'}</div>`;
 }
-async function loadBoard() { try { ui.board = await service.getLeaderboard(ui.tab, ui.view === 'result' && session?.seasonId ? session.seasonId : currentSeason()); ui.boardError = ''; } catch { ui.board = null; ui.boardError = ui.tab === 'class' && !service.memory.approved ? '우리 반 순위는 선생님 승인 후 볼 수 있어요.' : '순위를 불러오지 못했어요. 다시 눌러 주세요.'; } if (ui.view === 'home' || ui.view === 'result') render(); }
+async function loadBoard() { try { ui.board = await service.getLeaderboard(ui.tab, ui.view === 'result' && session?.seasonId ? session.seasonId : currentSeason()); ui.boardError = ''; } catch { ui.board = null; ui.boardError = ui.tab === 'class' && !service.memory.approved ? '우리 반 순위는 학급 참여 후 볼 수 있어요.' : '순위를 불러오지 못했어요. 다시 눌러 주세요.'; } if (ui.view === 'home' || ui.view === 'result') render(); }
 
 function joinView() {
   const joined=service.memory.approved;
@@ -513,7 +513,7 @@ root.addEventListener('click', async e => {
     finally { ui.busy = false; render(); }
   }
   else if (action === 'redeem-ticket') { ui.busy = true; try { await service.redeemTicket(root.querySelector('#return-ticket').value.trim()); ui.error = ''; } catch { ui.error = '복귀 코드를 확인하지 못했어요. 선생님께 새 코드를 받아 주세요.'; } finally { ui.busy = false; render(); } }
-  else if (action === 'refresh-status') { ui.busy = true; try { await service.refreshStatus(); ui.error = ''; } catch { ui.error = '승인 상태를 확인하지 못했어요.'; } finally { ui.busy = false; render(); } }
+  else if (action === 'refresh-status') { ui.busy = true; try { await service.refreshStatus(); ui.error = ''; } catch { ui.error = '학급 소속 상태를 확인하지 못했어요.'; } finally { ui.busy = false; render(); } }
   else if (action === 'switch-student') { ui.busy = true; try { await service.switchStudent(); session = null; ui.view = 'home'; ui.board = null; ui.error = ''; } catch { ui.error = '학생 바꾸기를 완료하지 못했어요. 네트워크를 확인해 주세요.'; } finally { ui.busy = false; render(); loadBoard(); } }
   else if (action === 'practice' || action === 'record') { ui.busy = true; try { if (live && action === 'record') { await service.refreshStatus(); if (!service.memory.approved) { ui.view = 'join'; ui.error = '학급 소속을 확인해 주세요. 선생님께 문의해 주세요.'; render(); return; } } ui.mode = action === 'record' ? 'regular' : 'practice'; ui.view = 'intro'; } catch { ui.error = '학급 연결을 확인하지 못했어요. 다시 시도해 주세요.'; } finally { ui.busy = false; render(); } }
   else if (action === 'start-now') {

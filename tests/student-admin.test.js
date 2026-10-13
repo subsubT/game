@@ -30,6 +30,7 @@ test('teacher rename validates names, preserves ledger/aliases, is idempotent an
   const {db,h,cls}=await fixture();await h.requestJoin({code:cls.code,privateName:'원래이름',requestId:id()},'student');const sid=db.rows.get('studentBindings/student').studentId;
   const path=`classes/${cls.classId}/students/${sid}`,before=structuredClone(db.rows.get(path)),args={classId:cls.classId,studentId:sid,privateName:'  바뀐이름  ',requestId:id()};
   await denied(h.renameStudent(args,'student'),'FORBIDDEN');await denied(h.renameStudent(args,'other-teacher'),'FORBIDDEN');
+  for(const studentId of ['../../other/students/victim','..','a/b','a\\b']) { await denied(h.renameStudent({...args,studentId},'teacher'),'INVALID_REQUEST');await denied(h.removeStudent({classId:cls.classId,studentId,requestId:id()},'teacher'),'INVALID_REQUEST'); }
   for(const privateName of ['', ' ', '가'.repeat(13), '이\n름', 123])await assert.rejects(h.renameStudent({...args,privateName,requestId:id()},'teacher'));
   const renamed=await h.renameStudent(args,'teacher');assert.equal(renamed.privateName,'바뀐이름');assert.deepEqual(await h.renameStudent(args,'teacher'),renamed);assert.equal((await h.getStudentStatus({},'student')).privateName,'바뀐이름');
   assert.equal(db.rows.get(path).classAlias,before.classAlias);assert.equal([...db.rows.values()].filter(v=>v.action==='rename').length,1);assert.deepEqual([...db.rows.values()].find(v=>v.action==='rename').before,before);
