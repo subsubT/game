@@ -129,11 +129,11 @@ Google 연결은 Firebase provider linking으로 현재 익명 uid를 유지하�
 | `requestJoin` | code, 선택 privateName, requestId → 활성 소속·별명 / 학생 익명 인증 |
 | `approveStudent`, `issueStudentReturnTicket` | classId, studentId → 상태/티켓 / 소유 교사 |
 | `redeemStudentReturnTicket` | ticket, requestId → 새 바인딩 / 새 학생 인증 |
-| `startSession` | gameId, mode, requestId → sessionId, versions, seasonId, expiresAt, 첫 PublicQuestion / 승인 학생 |
+| `startSession` | gameId, mode, requestId → sessionId, versions, seasonId, expiresAt, 첫 PublicQuestion / 소속 학생 |
 | `getSession` | sessionId → 확정 진행 위치·현재 문제/본인 결과 / 해당 학생 또는 소유 교사 |
 | `submitAnswer` | sessionId, questionId, stepId, value 또는 skip, expectedRevision, requestId → 채점·해설·다음 단계/문제 / 해당 학생 |
 | `finishSession` | sessionId, reason, requestId → authoritative Result, rankStatus / 해당 학생; 50문항 완료도 이 함수의 종료 처리 재사용 |
-| `getLeaderboard` | gameId, version, seasonId, scope(class/global), cursor → RankPage / class는 승인 학생 또는 소유 교사; global은 인증된 방문자 |
+| `getLeaderboard` | gameId, version, seasonId, scope(class/global), cursor → RankPage / class는 소속 학생 또는 소유 교사; global은 인증된 방문자 |
 | `listClassSessions`, `getSessionDetails` | classId, gameId, 필터·cursor → 요약/답안 / 소유 교사 |
 | `setGlobalParticipation` | 허용 여부 → 등록/철회 작업 상태 / 자기 학생 또는 소유 교사; 양쪽 설정 AND |
 | `beginGoogleConnection`, `createOrSelectSheet`, `syncSheet`, `disconnectSheets` | 설정·requestId → 진행 상태 / 소유 교사·최근 인증 |
@@ -165,12 +165,12 @@ Google 연결은 Firebase provider linking으로 현재 익명 uid를 유지하�
 | 주체 | 학급 순위 | 전체 순위 | 상세 기록 | 변경 |
 |---|---|---|---|---|
 | 미인증 | 불가 | 인증 준비 안내 | 불가 | 불가 |
-| 인증 방문자/승인 대기 | 불가 | 최소 순위 조회 | 불가 | 자기 참여 신청만 |
-| 승인 학생 | 자기 학급만 | 최소 순위 조회 | 자기 회차만 | 자기 회차 API, 자기 공개 선택 |
+| 미소속 인증 방문자 | 불가 | 최소 순위 조회 | 불가 | 자기 참여 신청만 |
+| 소속 학생 | 자기 학급만 | 최소 순위 조회 | 자기 회차만 | 자기 회차 API, 자기 공개 선택 |
 | 교사 | 소유 학급만 | 최소 순위 조회 | 소유 학급만 | 소유 학급 관리 API |
 | 순위/내보내기 worker | 필요한 원장만 | 집계 | 작업 대상만 | 전용 서버 권한 |
 
-집계 worker는 session 완료 이벤트마다 더하는 대신 **현재 유효 원장에서 최고점을 계산해 upsert**한다. 학급·학생의 `globalOptIn`은 생성/승인 시 모두 true로 두고, 정규 회차 완료를 기본 전체 등록으로 처리한다. 어느 한쪽이 false이면 전체 순위 투영을 만들지 않거나 기존 행을 철회한다. 같은 작업 반복에도 순위 인원수가 늘지 않는다. entry 이전 점수 버킷 감소·새 점수 버킷 증가를 transaction으로 처리하고, revision이 오래된 작업은 덮어쓰지 못한다. 두 보드는 비동기 갱신 가능하며 UI는 `asOf`와 ‘순위 반영 중’을 표시한다. 목표 30초 내 반영, 2분 넘으면 경고·재시도 작업이며 완료 성적을 실패로 되돌리지 않는다.
+집계 worker는 session 완료 이벤트마다 더하는 대신 **현재 유효 원장에서 최고점을 계산해 upsert**한다. 학급·학생의 `globalOptIn`은 생성/가입 시 모두 true로 두고, 정규 회차 완료를 기본 전체 등록으로 처리한다. 어느 한쪽이 false이면 전체 순위 투영을 만들지 않거나 기존 행을 철회한다. 같은 작업 반복에도 순위 인원수가 늘지 않는다. entry 이전 점수 버킷 감소·새 점수 버킷 증가를 transaction으로 처리하고, revision이 오래된 작업은 덮어쓰지 못한다. 두 보드는 비동기 갱신 가능하며 UI는 `asOf`와 ‘순위 반영 중’을 표시한다. 목표 30초 내 반영, 2분 넘으면 경고·재시도 작업이며 완료 성적을 실패로 되돌리지 않는다.
 
 삭제·차단·전체 등록 해제 때 대상 원장을 읽을 수 없게 먼저 tombstone을 설정하고 공개 행/역매핑/카운트를 재계산한다. API는 캐시된 행도 현재 공개 허용 상태로 필터링한다. 읽는 중 변경을 고려해 entries·버킷·revision을 일관된 snapshot에서 계산하고 페이지 커서가 오래되면 새로고침을 안내한다. 글로벌 페이지 캐시는 비식별 투영에만 최대 30초, 철회 대상은 즉시 제외 검증한다. 정확한 순위 제공이 어렵게 집계가 지연되면 순위 갱신 중으로 표시하고 임의 순위를 만들지 않는다.
 
