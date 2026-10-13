@@ -28,12 +28,14 @@ export class FirebaseGameService extends GameService {
     const status = await this.invoke('getStudentStatus', {});
     this.updateStatus(status);
     const id = this.storage?.getItem(SESSION_KEY);
-    if (id) { try { this.memory.session = await this.invoke('getSession', { sessionId: id }); } catch { /* keep the pointer so a later refresh can recover after a network failure */ } }
+    if (id && !this.memory.approved) this.storage?.removeItem(SESSION_KEY);
+    else if (id) { try { this.memory.session = await this.invoke('getSession', { sessionId: id }); } catch { /* keep the pointer so a later refresh can recover after a network failure */ } }
     return this;
   }
   updateStatus(status) {
     this.memory.joined = status.status !== 'new'; this.memory.approved = status.status === 'approved';
     this.memory.classAlias = status.classAlias || ''; this.memory.checkMark = status.checkMark || '';
+    this.memory.privateName = status.privateName || '';
     if (status.globalParticipation !== undefined) this.memory.globalParticipation = status.globalParticipation;
     return status;
   }

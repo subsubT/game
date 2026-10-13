@@ -52,22 +52,14 @@ test('Firebase Auth, Functions, Firestore Rules, isolation, ranking and retries'
     assert.equal(classA.globalOptIn, true);
     await assert.rejects(teacherB.call('listPendingStudents', { classId: classA.classId }));
 
-    for (const [who, code] of [[studentA, classA.code], [studentB, classA.code], [studentC, classB.code], [pending, classB.code]]) {
-      const join = await who.call('requestJoin', { code, privateName: '학생', requestId: id() });
-      assert.equal(join.status, 'pending'); assert.match(join.checkMark, /^\d\d$/);
-      assert.equal((await who.call('getStudentStatus')).status, 'pending');
-      await assert.rejects(who.call('getLeaderboard', { gameId: '1math3', rulesVersion: '1.0.0', curriculumVersion: '1.0.0', seasonId: '2026-09', scope: 'class' }));
-      await assert.rejects(who.call('startSession', { gameId: '1math3', mode: 'regular', requestId: id() }));
+    for (const [who, code] of [[studentA,classA.code],[studentB,classA.code],[studentC,classB.code],[pending,classB.code]]) {
+      const join=await who.call('requestJoin',{code,privateName:'학생',requestId:id()});assert.equal(join.status,'approved');assert.match(join.checkMark,/^\d\d$/);
+      assert.equal((await who.call('getStudentStatus')).status,'approved');
     }
-    const aPending = (await teacherA.call('listPendingStudents', { classId: classA.classId })).students;
-    const bPending = (await teacherB.call('listPendingStudents', { classId: classB.classId })).students;
-    assert.equal(aPending.length, 2); assert.equal(bPending.length, 2);
-    for (const s of aPending) await teacherA.call('approveStudent', { classId: classA.classId, studentId: s.studentId });
-    await teacherB.call('approveStudent', { classId: classB.classId, studentId: bPending[0].studentId });
-    const cStatus = await studentC.call('getStudentStatus'), pStatus = await pending.call('getStudentStatus');
-    const c = cStatus.status === 'approved' ? studentC : pending, unapproved = c === studentC ? pending : studentC;
-    assert.equal((await unapproved.call('getStudentStatus')).status, 'pending');
-
+    assert.equal((await teacherA.call('listPendingStudents',{classId:classA.classId})).students.length,0);
+    assert.equal((await teacherA.call('listClassStudents',{classId:classA.classId})).students.length,2);
+    assert.equal((await teacherB.call('listClassStudents',{classId:classB.classId})).students.length,2);
+    const c=studentC;
     const startId = id(), first = await studentA.call('startSession', { gameId: '1math3', mode: 'regular', requestId: startId });
     const duplicateStart = await studentA.call('startSession', { gameId: '1math3', mode: 'regular', requestId: startId });
     assert.equal(duplicateStart.sessionId, first.sessionId);

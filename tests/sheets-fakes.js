@@ -3,7 +3,7 @@ import { GOOGLE_SCOPES } from '../worker/src/google-api.js';
 import { ApiError } from '../worker/src/error.js';
 export class MemoryDb {
   constructor() { this.rows=new Map(); this.queue=Promise.resolve(); }
-  doc(path) { const db=this; return {path,id:path.split('/').at(-1),get:async()=>db.snap(path),collection:name=>db.collection(`${path}/${name}`)}; }
+  doc(path) { const db=this; return {path,id:path.split('/').at(-1),get:async()=>db.snap(path),create:async value=>{if(db.rows.has(path))throw Error('exists');db.rows.set(path,structuredClone(value));},collection:name=>db.collection(`${path}/${name}`)}; }
   snap(path) { const value=structuredClone(this.rows.get(path));return {ref:this.doc(path),id:path.split('/').at(-1),exists:value!==undefined,data:()=>value}; }
   async getAll(...refs) {return refs.map(ref=>this.snap(ref.path));}
   collection(path) {

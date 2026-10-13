@@ -75,7 +75,7 @@ Google 연결은 Firebase provider linking으로 현재 익명 uid를 유지하�
 - `joinCodes/{HMAC(code)}` 인덱스에 classId·codeVersion·expiresAt을 저장하고 transaction의 create-if-absent로 충돌 시 재생성한다. 비밀 HMAC 키는 서버 관리. 코드 표시용 원문은 비공개 학급 설정에서 암호화 보관한다.
 - 기본 유효기간 발급 후 30일, 교사가 더 빨리 닫기/회전 가능. 만료·폐쇄·회전 시 신규 신청을 차단한다. 과거 코드를 다른 학급에 재사용하지 않도록 사용 이력 digest를 개인정보 없이 유지한다.
 - 공개 코드에 개인정보·학교 식별 규칙을 넣지 않는다. 코드는 공유될 수 있으므로 유효 코드만 알아도 학급 순위/명단을 읽을 수 있게 하지 않는다.
-- `requestJoin`은 uid별·학급별 중복 신청을 합치고 임시 studentId와 대조 표식을 만든다. 교사가 승인하면 `studentBindings/{uid}`가 classId/studentId에 활성 연결되고 학생의 전체 순위 등록 설정은 기본 켜짐으로 생성된다. 승인 전 학급 데이터는 반환하지 않는다.
+- `requestJoin`은 유효한 코드 입력 즉시 studentId와 활성 `studentBindings/{uid}`를 원자적으로 생성한다. UID별 중복 가입은 같은 학생으로 수렴하며, 전체 순위 등록은 기본 켜짐이다. 2026-10-13 사용자 요청으로 교사 승인 절차를 제거했다. 기존 승인 대기는 다음 상태 조회에서 자동 활성화한다. 교사는 자기 학급 학생의 비공개 이름을 변경하거나 소속과 권한을 해제할 수 있다. 변경 전 백업과 학습 원장은 보관한다.
 - 교사만 128bit 무작위 일회용 학생 복귀 티켓을 발급한다. 10분 만료, 해시 저장, transaction 소비. 학생은 QR 스캔 또는 티켓 입력을 이용한다. 공개 짧은 학급코드만으로 복귀하지 않는다.
 - 복귀 시 기존 학생 uid 바인딩을 폐기하고 새 uid에 연결한다(학생당 활성 기기 1개). 새 기기에서 이전 확정 회차를 이어 할 수 있다. 공용 기기 바꾸기에서는 서버 바인딩 폐기 요청과 로컬 세션 삭제를 수행한다.
 - 참여 닫기는 이미 승인된 학생을 퇴출하지 않는다. 학생 차단은 바인딩 즉시 비활성화·새 기록 차단, 학급 보관은 새 신청·새 회차 차단 및 기존 진행 회차 미완료 종료, 과거 결과는 보존기간 내 조회 허용이다.
@@ -92,7 +92,7 @@ Google 연결은 Firebase provider linking으로 현재 익명 uid를 유지하�
 | `recoveryKeys/{recoveryId}` | teacherId, secretHash, version, active. API에서도 해시 반환 금지 |
 | `classes/{classId}` | ownerTeacherId, privateLabel, status, joinEnabled, codeVersion, globalOptIn(생성 시 true), createdAt, archivedAt |
 | `joinCodes/{codeDigest}` | classId, version, expiresAt, active. 클라이언트 조회 금지 |
-| `classes/{classId}/students/{studentId}` | privateName(optional), classAlias, status(pending/active/blocked), globalOptIn(승인 시 true), createdAt |
+| `classes/{classId}/students/{studentId}` | privateName(optional), classAlias, status(pending legacy/active/removed), globalOptIn(가입 시 true), createdAt |
 | `studentBindings/{uid}` | classId, studentId, active, bindingVersion |
 | `studentReturnTickets/{ticketHash}` | classId, studentId, expiresAt, usedAt |
 | `classes/{classId}/sessions/{sessionId}` | studentId, gameId, versions, seasonId, mode, seed(서버 전용), state, currentIndex, score, correct, wrong, skipped, unanswered, startedAt, endedAt, expiresAt, endReason, revision |
@@ -126,7 +126,7 @@ Google 연결은 Firebase provider linking으로 현재 익명 uid를 유지하�
 | `createTeacherSpace` | requestId → 관리 공간·1회 복구 키 / 새 교사 인증 |
 | `recoverTeacherSpace` | recoveryId, secret, requestId → 교체된 관리권·새 키 / 새 인증 + 키 증명 |
 | `createClass`, `rotateJoinCode`, `setClassStatus` | 설정·requestId → 학급·코드 또는 상태 / 소유 교사 |
-| `requestJoin` | code, 선택 privateName, requestId → pendingId·대조 표식 / 학생 익명 인증 |
+| `requestJoin` | code, 선택 privateName, requestId → 활성 소속·별명 / 학생 익명 인증 |
 | `approveStudent`, `issueStudentReturnTicket` | classId, studentId → 상태/티켓 / 소유 교사 |
 | `redeemStudentReturnTicket` | ticket, requestId → 새 바인딩 / 새 학생 인증 |
 | `startSession` | gameId, mode, requestId → sessionId, versions, seasonId, expiresAt, 첫 PublicQuestion / 승인 학생 |
@@ -205,7 +205,7 @@ Google 연결은 Firebase provider linking으로 현재 익명 uid를 유지하�
 
 | 위험 | 대응 및 남는 한계 |
 |---|---|
-| 코드 추측·외부 가입 | 4자리 무작위·만료·교사 승인·속도 제한. 코드만으로 기록에 접근하거나 가입이 승인되지 않으며, 교사가 확인 없이 승인하면 외부인 참여 가능 |
+| 코드 추측·외부 가입 | 4자리 무작위·만료·속도 제한. 사용자 요청에 따라 코드 입력 즉시 본인 소속이 생성되지만, 타인의 기록이나 교사 권한은 부여하지 않는다. 교사가 소속 학생을 확인하고 불필요한 학생을 삭제할 수 있다 |
 | 이름 사칭·동명이인 | 이름을 인증/키로 사용하지 않음. 현장 표식 확인, 교사 발급 학생 복귀 티켓 |
 | 교사 기기 분실 | 복구 키/선택 Google 연결, 복구 시 모든 바인딩 폐기. 모든 증명 분실은 복구 불가 |
 | 클라이언트 점수 조작 | 서버 문항·응답·채점, 회차 nonce/버전/순서·멱등성. 자동 풀이·대리 응시까지 완전히 방지할 수 없음 |

@@ -57,7 +57,7 @@ async function student(uid, pending = false) {
   const snap = await db.doc(`studentBindings/${uid}`).get();
   if (snap.exists && snap.data().active) {
     const binding = snap.data(), s = await studentRef(binding).get();
-    if (s.exists && s.data().status === 'active') return { ...binding, data: s.data() };
+    if (s.exists && s.data().status === 'active' && s.data().uid === uid) return { ...binding, data: s.data() };
   }
   if (pending) return null;
   fail('PENDING_APPROVAL');
@@ -267,6 +267,46 @@ export const listClassStudents = call(async (data, uid) => {
   const snap = await ref.collection('students').where('status', '==', 'active').limit(200).get();
   return { students: snap.docs.map(d => ({ studentId: d.id, privateName: d.data().privateName, classAlias: d.data().classAlias, checkMark: d.data().checkMark, globalOptIn: d.data().globalOptIn !== false, bestScores: d.data().bestScores || {} })) };
 });
+export const renameStudent = call(async (data, uid) => {
+  fields(data, ['classId', 'studentId', 'privateName', 'requestId']); requestId(data);
+  const { ref } = await ownedClass(uid, data.classId), sid = str(data.studentId, 80), privateName = nameOf(str(data.privateName, 100));
+  if (!privateName) fail('INVALID_NAME');
+  const sref = ref.collection('students').doc(sid), op = opRef(uid, 'renameStudent', data.requestId), fp = hash(JSON.stringify([data.classId, sid, privateName]));
+  return db.runTransaction(async tx => {
+    const [prior, snap, sheet] = await Promise.all([tx.get(op), tx.get(sref), tx.get(db.doc(`sheetExports/${data.classId}`))]);
+    const saved = checkOp(prior, fp); if (saved) return saved;
+    if (!snap.exists || snap.data().status !== 'active') fail('NOT_FOUND');
+    tx.create(db.doc(`studentAdminBackups/${randomId()}`), { action: 'rename', classId: data.classId, studentId: sid, before: snap.data(), changedBy: uid, createdAt: now() });
+    tx.update(sref, { privateName, renamedAt: now() });
+    if (sheet.data()?.spreadsheetId) tx.set(db.doc(`sheetJobs/${data.classId}`), { state: 'pending', dirty: randomId(), nextRunAt: 0 });
+    const result = { studentId: sid, privateName }; tx.create(op, { fingerprint: fp, result }); return result;
+  });
+});
+export const removeStudent = call(async (data, uid) => {
+  fields(data, ['classId', 'studentId', 'requestId']); requestId(data);
+  const { ref } = await ownedClass(uid, data.classId), sid = str(data.studentId, 80), sref = ref.collection('students').doc(sid);
+  const op = opRef(uid, 'removeStudent', data.requestId), fp = hash(JSON.stringify([data.classId, sid]));
+  return db.runTransaction(async tx => {
+    const [prior, snap, sheet] = await Promise.all([tx.get(op), tx.get(sref), tx.get(db.doc(`sheetExports/${data.classId}`))]);
+    const saved = checkOp(prior, fp); if (saved) return saved;
+    if (!snap.exists || !['active', 'removed'].includes(snap.data().status)) fail('NOT_FOUND');
+    if (snap.data().status === 'removed') return { status: 'removed' };
+    const s = snap.data(), bound = db.doc(`studentBindings/${s.uid}`), binding = await tx.get(bound);
+    const keys = Object.keys(s.bestScores || {});
+    if (keys.length > 100) fail('RATE_LIMITED');
+    const ranks = await Promise.all(keys.map(key => rankRefs(tx, data.classId, sid, key)));
+    // Keep a restorable record before revoking membership and removing projections.
+    tx.create(db.doc(`studentAdminBackups/${randomId()}`), { action: 'remove', classId: data.classId, studentId: sid, before: s, binding: binding.data() || null, ranks: ranks.map(r => ({ classEntryPath: r.ce.path, globalEntryPath: r.ge.path, classEntry: r.ces.data() || null, globalEntry: r.ges.data() || null, classCountPath: r.cc.path, globalCountPath: r.gc.path, classCount: r.ccs.data() || null, globalCount: r.gcs.data() || null })), changedBy: uid, createdAt: now() });
+    tx.update(sref, { status: 'removed', removedAt: now(), removedBy: uid });
+    if (binding.data()?.classId === data.classId && binding.data()?.studentId === sid) tx.update(bound, { active: false, removed: true });
+    for (const r of ranks) {
+      if (r.ces.exists) { tx.delete(r.ce); tx.set(r.cc, { counts: scoreCounts(r.ccs.data()?.counts, r.ces.data().score, null), updatedAt: now() }); }
+      if (r.ges.exists) { tx.delete(r.ge); tx.set(r.gc, { counts: scoreCounts(r.gcs.data()?.counts, r.ges.data().score, null), updatedAt: now() }); }
+    }
+    if (sheet.data()?.spreadsheetId) tx.set(db.doc(`sheetJobs/${data.classId}`), { state: 'pending', dirty: randomId(), nextRunAt: 0 });
+    const result = { status: 'removed' }; tx.create(op, { fingerprint: fp, result }); return result;
+  });
+});
 export const getTeacherLeaderboard = call(async (data, uid) => {
   fields(data, ['classId', 'seasonId']);
   if (!validSeason(data.seasonId)) fail('INVALID_REQUEST');
@@ -320,26 +360,52 @@ export const requestJoin = call(async (data, uid) => {
   const pending = db.doc(`joinRequests/${uid}`);
   const result = await db.runTransaction(async tx => {
     const [joined, old, codeSnap] = await Promise.all([tx.get(db.doc(`studentBindings/${uid}`)), tx.get(pending), tx.get(idx)]);
-    if (joined.exists && joined.data().active) fail('FORBIDDEN');
-    if (old.exists) {
-      if (old.data().codeDigest !== digest(code) && (!codeSnap.exists || !codeSnap.data().active || codeSnap.data().expiresAt <= now() || codeSnap.data().classId !== old.data().classId)) fail('FORBIDDEN');
-      return { status: 'pending', checkMark: old.data().checkMark };
-    }
     if (!codeSnap.exists || !codeSnap.data().active || codeSnap.data().expiresAt <= now()) fail('JOIN_UNAVAILABLE');
     const classId = codeSnap.data().classId, classSnap = await tx.get(db.doc(`classes/${classId}`));
     if (!classSnap.exists || classSnap.data().status !== 'active' || !classSnap.data().joinEnabled || classSnap.data().codeVersion !== codeSnap.data().codeVersion) fail('JOIN_UNAVAILABLE');
+    if (joined.exists) {
+      if (!joined.data().active || joined.data().classId !== classId) fail('FORBIDDEN');
+      const member = await tx.get(studentRef(joined.data()));
+      if (!member.exists || member.data().status !== 'active' || member.data().uid !== uid) fail('FORBIDDEN');
+      return { status: 'approved', classAlias: member.data().classAlias, privateName: member.data().privateName, checkMark: member.data().checkMark, globalParticipation: member.data().globalOptIn !== false };
+    }
+    if (old.exists) {
+      if (old.data().classId !== classId) fail('FORBIDDEN');
+      const sref = db.doc(`classes/${classId}/students/${old.data().studentId}`), snap = await tx.get(sref);
+      if (!snap.exists || snap.data().status !== 'pending' || snap.data().uid !== uid) fail('FORBIDDEN');
+      return enrollPending(tx, uid, pending, old, sref, snap);
+    }
     const studentId = randomId(), checkMark = String(randomBytes(1)[0] % 90 + 10), classAlias = aliasOf(studentId);
-    tx.create(db.doc(`classes/${classId}/students/${studentId}`), { uid, privateName, checkMark, classAlias, status: 'pending', createdAt: now() });
-    tx.create(pending, { classId, studentId, checkMark, codeDigest: digest(code) });
-    return { status: 'pending', checkMark };
+    tx.create(db.doc(`classes/${classId}/students/${studentId}`), { uid, privateName, checkMark, classAlias, status: 'active', globalOptIn: true, createdAt: now(), joinedAt: now() });
+    tx.create(db.doc(`studentBindings/${uid}`), { classId, studentId, active: true, bindingVersion: 1 });
+    return { status: 'approved', checkMark, classAlias, privateName, globalParticipation: true };
   });
   return result;
 });
+function enrollPending(tx, uid, pendingRef, pending, sref, snap) {
+  const s = snap.data(), p = pending.data();
+  tx.create(db.doc(`studentAdminBackups/${randomId()}`), { action: 'enroll-pending', classId: p.classId, studentId: p.studentId, before: s, pending: p, createdAt: now() });
+  tx.update(sref, { status: 'active', globalOptIn: true, joinedAt: now() });
+  tx.create(db.doc(`studentBindings/${uid}`), { classId: p.classId, studentId: p.studentId, active: true, bindingVersion: 1 });
+  tx.update(pendingRef, { status: 'joined' });
+  return { status: 'approved', classAlias: s.classAlias, privateName: s.privateName, checkMark: s.checkMark, globalParticipation: true };
+}
+async function enrollLegacyPending(uid) {
+  const bound = db.doc(`studentBindings/${uid}`), pendingRef = db.doc(`joinRequests/${uid}`);
+  const candidate = await pendingRef.get(); if (!candidate.exists || candidate.data().status === 'joined') return;
+  await db.runTransaction(async tx => {
+    const [binding, pending] = await Promise.all([tx.get(bound), tx.get(pendingRef)]);
+    if (binding.exists || !pending.exists || pending.data().status === 'joined') return;
+    const {classId, studentId} = pending.data(), sref = db.doc(`classes/${classId}/students/${studentId}`);
+    const [cls, snap] = await Promise.all([tx.get(db.doc(`classes/${classId}`)), tx.get(sref)]);
+    if (!cls.exists || cls.data().status !== 'active' || !cls.data().joinEnabled || !snap.exists || snap.data().status !== 'pending' || snap.data().uid !== uid) return;
+    enrollPending(tx, uid, pendingRef, pending, sref, snap);
+  });
+}
 export const getStudentStatus = call(async (data, uid) => {
-  fields(data, []); const s = await student(uid, true);
-  if (s) return { status: 'approved', classAlias: s.data.classAlias, globalParticipation: s.data.globalOptIn !== false };
-  const pending = await db.doc(`joinRequests/${uid}`).get();
-  return pending.exists ? { status: 'pending', checkMark: pending.data().checkMark } : { status: 'new' };
+  fields(data, []); await enrollLegacyPending(uid); const s = await student(uid, true);
+  if (s) return { status: 'approved', classAlias: s.data.classAlias, privateName: s.data.privateName, globalParticipation: s.data.globalOptIn !== false };
+  return { status: 'new' };
 });
 
 export const startSession = call(async (data, uid) => {
@@ -348,7 +414,8 @@ export const startSession = call(async (data, uid) => {
   const binding = await student(uid), fingerprint = hash(JSON.stringify([data.gameId, data.mode]));
   const op = opRef(uid, 'startSession', data.requestId), active = db.doc(`activeSessions/${digest(`${uid}:${GAME.gameId}`)}`);
   return db.runTransaction(async tx => {
-    const [prior, pointer, classSnap] = await Promise.all([tx.get(op), tx.get(active), tx.get(db.doc(`classes/${binding.classId}`))]);
+    const [prior, pointer, classSnap, member] = await Promise.all([tx.get(op), tx.get(active), tx.get(db.doc(`classes/${binding.classId}`)), tx.get(studentRef(binding))]);
+    if (!member.exists || member.data().status !== 'active' || member.data().uid !== uid) fail('FORBIDDEN');
     const previous = checkOp(prior, fingerprint);
     if (previous) {
       const saved = await tx.get(db.doc(`classes/${binding.classId}/sessions/${previous.sessionId}`));
@@ -399,7 +466,8 @@ export const submitAnswer = call(async (data, uid) => {
   const fingerprint = hash(JSON.stringify([sessionId, questionId, data.skip || false, data.response]));
   const op = opRef(uid, 'submitAnswer', data.requestId), sref = db.doc(`classes/${binding.classId}/sessions/${sessionId}`);
   return db.runTransaction(async tx => {
-    const [prior, snap] = await Promise.all([tx.get(op), tx.get(sref)]);
+    const [prior, snap, member] = await Promise.all([tx.get(op), tx.get(sref), tx.get(studentRef(binding))]);
+    if (!member.exists || member.data().status !== 'active' || member.data().uid !== uid) fail('FORBIDDEN');
     const previous = checkOp(prior, fingerprint); if (previous) return previous;
     if (!snap.exists || snap.data().studentId !== binding.studentId || snap.data().status !== 'playing') fail('SESSION_NOT_ACTIVE');
     const s = unpackSession(snap.data()); if (s.expiresAt <= now()) fail('SESSION_EXPIRED');
@@ -442,7 +510,8 @@ export const finishSession = call(async (data, uid) => {
   const op = opRef(uid, 'finishSession', data.requestId), fingerprint = hash(JSON.stringify([sessionId, data.reason]));
   const sref = db.doc(`classes/${binding.classId}/sessions/${sessionId}`), active = db.doc(`activeSessions/${digest(`${uid}:${GAME.gameId}`)}`);
   return db.runTransaction(async tx => {
-    const [prior, snap, pointer] = await Promise.all([tx.get(op), tx.get(sref), tx.get(active)]);
+    const [prior, snap, pointer, member] = await Promise.all([tx.get(op), tx.get(sref), tx.get(active), tx.get(studentRef(binding))]);
+    if (!member.exists || member.data().status !== 'active' || member.data().uid !== uid) fail('FORBIDDEN');
     const previous = checkOp(prior, fingerprint); if (previous) return previous;
     if (!snap.exists || snap.data().studentId !== binding.studentId) fail('FORBIDDEN');
     const s = unpackSession(snap.data());

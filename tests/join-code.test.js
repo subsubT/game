@@ -19,20 +19,21 @@ test('numeric codes retry collisions, remain idempotent, normalize input and rej
   const requestId=id(),args={privateLabel:'중복검증반',requestId};const next=await h.createClass(args,'owner');assert.equal(collisionChecks,1);assert.match(next.code,/^[0-9]{4}$/);assert.deepEqual(await h.createClass(args,'owner'),next);
   db.rows.set(`classes/${cls.classId}`,{...db.rows.get(`classes/${cls.classId}`),codeCipher:encrypt('0007')});
   db.rows.set(`joinCodes/${digest('0007')}`,{classId:cls.classId,codeVersion:1,active:true,expiresAt:new Date(Date.now()+86400000).toISOString()});
-  assert.equal((await h.requestJoin({code:' ０００７ ',requestId:id()},'zero-student')).status,'pending');
+  assert.equal((await h.requestJoin({code:' ０００７ ',requestId:id()},'zero-student')).status,'approved');
   for(const code of ['123','12345','AB12',1234])await assert.rejects(h.requestJoin({code,requestId:id()},'invalid-student'));
   assert.equal([...db.rows.keys()].filter(p=>p.startsWith('joinCodeBackups/')).length,0);
 });
-test('legacy upgrade is owned, atomic and concurrent-idempotent; both codes keep pending students',async()=>{
+test('legacy upgrade is owned, atomic and concurrent-idempotent; both codes enroll existing pending students',async()=>{
   const {db,h,cls}=await fixture(),path=`classes/${cls.classId}`,oldCode='ABCD2345';
   const oldClass={...db.rows.get(path),codeCipher:encrypt(oldCode)};db.rows.set(path,oldClass);
   const oldIndex={classId:cls.classId,codeVersion:1,active:true,expiresAt:new Date(Date.now()+86400000).toISOString()};db.rows.set(`joinCodes/${digest(oldCode)}`,oldIndex);
-  await h.requestJoin({code:oldCode,requestId:id()},'pending-student');const priorPending=structuredClone(db.rows.get('joinRequests/pending-student'));
+  db.rows.set(`classes/${cls.classId}/students/legacy-pending`,{uid:'pending-student',privateName:'기존이름',classAlias:'초록별-10',status:'pending',checkMark:'11'});
+  db.rows.set('joinRequests/pending-student',{classId:cls.classId,studentId:'legacy-pending',codeDigest:digest(oldCode),checkMark:'11'});
   await h.createTeacherSpace({requestId:id()},'outsider');await assert.rejects(h.ensureClassJoinCode({classId:cls.classId},'outsider'),e=>e.code==='FORBIDDEN');
   const results=await Promise.all([h.ensureClassJoinCode({classId:cls.classId},'owner'),h.ensureClassJoinCode({classId:cls.classId},'owner')]);assert.deepEqual(results[0],results[1]);const upgraded=results[0];assert.match(upgraded.code,/^[0-9]{4}$/);
   const {codeCipher:oldCipher,...oldRest}=oldClass,{codeCipher:newCipher,...newRest}=db.rows.get(path);assert.deepEqual(oldRest,newRest);assert.notEqual(newCipher,oldCipher);
   const backups=[...db.rows].filter(([p])=>p.startsWith('joinCodeBackups/'));assert.equal(backups.length,1);assert.equal(backups[0][1].codeCipher,oldCipher);assert.deepEqual(db.rows.get(`joinCodes/${digest(oldCode)}`),oldIndex);
-  assert.equal((await h.requestJoin({code:upgraded.code,requestId:id()},'pending-student')).status,'pending');assert.deepEqual(db.rows.get('joinRequests/pending-student'),priorPending);
-  assert.equal((await h.requestJoin({code:oldCode,requestId:id()},'legacy-student')).status,'pending');assert.equal((await h.requestJoin({code:upgraded.code,requestId:id()},'numeric-student')).status,'pending');
+  assert.equal((await h.requestJoin({code:upgraded.code,requestId:id()},'pending-student')).status,'approved');assert.equal(db.rows.get('joinRequests/pending-student').status,'joined');
+  assert.equal((await h.requestJoin({code:oldCode,requestId:id()},'legacy-student')).status,'approved');assert.equal((await h.requestJoin({code:upgraded.code,requestId:id()},'numeric-student')).status,'approved');
   assert.deepEqual(await h.ensureClassJoinCode({classId:cls.classId},'owner'),upgraded);
 });

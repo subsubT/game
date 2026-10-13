@@ -14,7 +14,7 @@ export async function buildTables(db, classId, classLabel, secret) {
   const [students, sessions] = await Promise.all([db.collection(`classes/${classId}/students`).limit(200).get(), db.collection(`classes/${classId}/sessions`).limit(200).get()]);
   // Fail before changing the file rather than silently exporting truncated history.
   if (students.size === 200 || sessions.size === 200) throw new ApiError('EXPORT_LIMIT');
-  const aliases = new Map(students.docs.map(d => [d.id, d.data().classAlias]));
+  const aliases = new Map(students.docs.filter(d => d.data().status !== 'removed').map(d => [d.id, d.data().classAlias]));
   const complete = sessions.docs.map(d => ({ ...d.data(), id: d.id })).filter(s => s.status === 'complete' && s.mode === 'regular' && aliases.has(s.studentId)).sort((a,b) => a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id));
   const tables = {
     '안내': [['항목','내용'],['학급',literal(classLabel)],['자료','확정된 정규 완료 회차만 포함합니다.'],['동기화','앱이 관리하는 네 탭은 동기화 때 다시 작성됩니다. 개인 메모는 별도 탭에 보관하세요.'],['원장','이 문서 수정은 게임 점수·정답·순위·권한에 반영되지 않습니다.'],['개인정보','학급 별명만 사용합니다. 앱 연결 해제 후에도 Drive 문서는 남습니다.'],['내보내기 버전',1]],

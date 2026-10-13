@@ -207,7 +207,7 @@ test('Google outage cannot prevent a Firestore game completion; outbox survives 
   const f=fixture();await connect(f);await f.service.handlers.createOrSelectSheet({classId:cid},'teacher-a');const s=addSession(f);
   s.status='playing';s.currentIndex=49;s.revision=49;s.expiresAt=new Date(Date.now()+86400000).toISOString();const q=s.questions[49];q.status='pending';q.firstResponse=null;q.firstCorrect=false;q.earnedPoints=0;
   f.db.rows.set(`classes/${cid}/sessions/${s.sessionId}`,{...s,questions:undefined,questionsJson:JSON.stringify(s.questions),seasonId:'2026-10'});
-  f.db.rows.set('studentBindings/student',{classId:cid,studentId:sid,active:true});f.google.writeFailure='GOOGLE_UNAVAILABLE';
+  f.db.rows.get(`classes/${cid}/students/${sid}`).uid='student';f.db.rows.set('studentBindings/student',{classId:cid,studentId:sid,active:true});f.google.writeFailure='GOOGLE_UNAVAILABLE';
   const handlers=createHandlers(f.db,f.env.MATH3_SERVER_SECRET);const result=await handlers.submitAnswer({sessionId:s.sessionId,questionId:q.id,skip:true,expectedRevision:49,requestId:opaque()},'student');
   assert.equal(result.session.status,'complete');assert.equal(result.session.result.saveStatus,'confirmed');assert.ok(f.db.rows.has(`sheetJobs/${cid}`));
   const stored=structuredClone(f.db.rows.get(`classes/${cid}/sessions/${s.sessionId}`));await f.service.runJobs();assert.deepEqual(f.db.rows.get(`classes/${cid}/sessions/${s.sessionId}`),stored);assert.equal(f.db.rows.get(`sheetExports/${cid}`).status,'failed');assert.ok(f.db.rows.has(`sheetJobs/${cid}`));

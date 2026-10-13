@@ -228,7 +228,7 @@ class MockGameService extends GameService {
     return { boardKey: `${GAME.gameId}:${GAME.rulesVersion}:${GAME.curriculumVersion}:${seasonId}:${scope}`, scope, entries: visibleRows.map(r => ({ ...r, displayAlias: `${r.displayAlias} · 예시` })), saveStatus: 'localOnly', rankStatus: 'example' };
   }
   async setGlobalParticipation(enabled) { this.memory.globalParticipation = Boolean(enabled); if (this.memory.session) this.memory.session.globalParticipation = Boolean(enabled); this.persist(); return { enabled: this.memory.globalParticipation, status: 'localOnly' }; }
-  async joinClass(code, nickname = '') { if (!/^(?:[0-9]{4}|[A-HJ-NP-Z2-9]{8})$/.test(code.normalize('NFKC').trim().replace(/-/g,'').toUpperCase())) return { status: 'invalid' }; this.memory.joined = true; this.memory.approved = false; const cleaned = String(nickname).normalize('NFC').trim().replace(/[\p{Cc}\p{Cf}]/gu, ''); this.memory.nickname = Array.from(cleaned).slice(0, 12).join(''); this.memory.classAlias = '초록별-27'; this.persist(); return { status: 'pending', classAlias: this.memory.classAlias, checkMark: '●●' }; }
+  async joinClass(code, nickname = '') { if (!/^(?:[0-9]{4}|[A-HJ-NP-Z2-9]{8})$/.test(code.normalize('NFKC').trim().replace(/-/g,'').toUpperCase())) return { status: 'invalid' }; this.memory.joined = true; this.memory.approved = true; const cleaned = String(nickname).normalize('NFC').trim().replace(/[\p{Cc}\p{Cf}]/gu, ''); this.memory.nickname = Array.from(cleaned).slice(0, 12).join(''); this.memory.privateName = this.memory.nickname; this.memory.classAlias = '초록별-27'; this.persist(); return { status: 'approved', classAlias: this.memory.classAlias, privateName: this.memory.privateName }; }
   async approveDemo() { this.memory.approved = true; this.persist(); return { status: 'approved', classAlias: this.memory.classAlias }; }
   requireSession(id) { const s = this.memory.session; if (!s || s.sessionId !== id || s.status !== 'playing') throw new Error('SESSION_NOT_ACTIVE'); return s; }
   current(s, qid) { const q = s.questions[s.currentIndex]; if (!q || q.id !== qid) throw new Error('REVISION_CONFLICT'); return q; }
@@ -266,12 +266,14 @@ class FirebaseGameService extends GameService {
     const status = await this.invoke('getStudentStatus', {});
     this.updateStatus(status);
     const id = this.storage?.getItem(SESSION_KEY);
-    if (id) { try { this.memory.session = await this.invoke('getSession', { sessionId: id }); } catch { /* keep the pointer so a later refresh can recover after a network failure */ } }
+    if (id && !this.memory.approved) this.storage?.removeItem(SESSION_KEY);
+    else if (id) { try { this.memory.session = await this.invoke('getSession', { sessionId: id }); } catch { /* keep the pointer so a later refresh can recover after a network failure */ } }
     return this;
   }
   updateStatus(status) {
     this.memory.joined = status.status !== 'new'; this.memory.approved = status.status === 'approved';
     this.memory.classAlias = status.classAlias || ''; this.memory.checkMark = status.checkMark || '';
+    this.memory.privateName = status.privateName || '';
     if (status.globalParticipation !== undefined) this.memory.globalParticipation = status.globalParticipation;
     return status;
   }
@@ -413,7 +415,7 @@ function homeView() {
   const joined = service.memory.approved;
   const rankText = live ? '서버에서 확정된 기록만 보여 줍니다.' : '모두 예시 별명과 예시 점수예요. 실제 학생 기록이 아니에요.';
   const settingText = live ? '설정은 서버에 저장돼요.' : '지금 설정은 모의예요.';
-  return `<section class="panel hero"><div class="hero-star" aria-hidden="true">🌟</div><div class="eyebrow">1학년 2학기 수학 · 2단원</div><h1>수학 별 모으기</h1><p>덧셈과 뺄셈 문제를 풀고<br>별을 차곡차곡 모아 보아요.</p><div class="summary-grid"><div class="summary-item"><strong>50문항</strong>천천히 풀어요</div><div class="summary-item"><strong>5가지</strong>수학 놀이</div><div class="summary-item"><strong>쉬는 시간</strong>10문제마다 있어요</div></div><div class="actions">${btn('혼자 연습 시작하기', 'practice')} ${btn(joined ? '기록 도전 시작' : '학급 참여하기', joined ? 'record' : 'join', 'button secondary')}</div><p class="micro muted">시간 제한이 없어요. 연습 기록은 공식 순위에 올라가지 않아요.</p></section>
+  return `<section class="panel hero"><div class="hero-star" aria-hidden="true">🌟</div><div class="eyebrow">1학년 2학기 수학 · 2단원</div><h1>수학 별 모으기</h1>${joined && service.memory.privateName ? `<p class="micro">내 이름: ${esc(service.memory.privateName)}</p>` : ""}<p>덧셈과 뺄셈 문제를 풀고<br>별을 차곡차곡 모아 보아요.</p><div class="summary-grid"><div class="summary-item"><strong>50문항</strong>천천히 풀어요</div><div class="summary-item"><strong>5가지</strong>수학 놀이</div><div class="summary-item"><strong>쉬는 시간</strong>10문제마다 있어요</div></div><div class="actions">${btn('혼자 연습 시작하기', 'practice')} ${btn(joined ? '기록 도전 시작' : '학급 참여하기', joined ? 'record' : 'join', 'button secondary')}</div><p class="micro muted">시간 제한이 없어요. 연습 기록은 공식 순위에 올라가지 않아요.</p></section>
   <section class="panel"><div class="panel-title"><div><h2>친구들 순위</h2><p class="muted">${rankText}</p></div><span class="pill">전체 순위 기본 공개</span></div>${rankTabs()}<div id="rank-content">${rankContent()}</div><label class="toggle-label"><input type="checkbox" data-global-toggle ${service.memory.globalParticipation ? 'checked' : ''} ${live && !service.memory.approved ? 'disabled' : ''}><span>전체 순위에 내 최고 기록 등록 허용<br><span class="micro muted">현재 ${service.memory.globalParticipation ? '켜짐' : '꺼짐'} · 기본값은 켜짐. 꺼도 순위 조회는 할 수 있어요. ${settingText}</span></span></label><div class="notice micro">전체 순위에는 학급과 분리된 별명과 최고점만 보입니다.</div>${live ? `<div class="actions">${btn('학생 바꾸기', 'switch-student', 'button light')}</div>` : ''}</section>`;
 }
 function rankTabs() { return `<div class="tabs" role="tablist" aria-label="순위 범위"><button class="tab" type="button" role="tab" aria-selected="${ui.tab === 'class'}" data-action="tab-class">우리 반 순위</button><button class="tab" type="button" role="tab" aria-selected="${ui.tab === 'global'}" data-action="tab-global">전체 순위</button></div>`; }
@@ -425,9 +427,8 @@ function rankContent() {
 async function loadBoard() { try { ui.board = await service.getLeaderboard(ui.tab, ui.view === 'result' && session?.seasonId ? session.seasonId : currentSeason()); ui.boardError = ''; } catch { ui.board = null; ui.boardError = ui.tab === 'class' && !service.memory.approved ? '우리 반 순위는 선생님 승인 후 볼 수 있어요.' : '순위를 불러오지 못했어요. 다시 눌러 주세요.'; } if (ui.view === 'home' || ui.view === 'result') render(); }
 
 function joinView() {
-  const state = service.memory.joined ? (service.memory.approved ? 'approved' : 'pending') : 'new';
-  return `<section class="panel"><div class="eyebrow">학급 참여${live ? '' : ' · 모의 체험'}</div><h1>우리 반과 함께할까요?</h1><p class="muted">참여 코드를 선생님에게 받아 적어요. ${live ? '선생님이 대조 표식을 확인한 뒤 승인하면 기록 도전을 시작할 수 있어요.' : '아래 참여와 승인은 모두 예시예요. 이 모의 화면은 실제 학급이나 학생 정보를 저장하지 않아요.'}</p>
-  ${state === 'new' ? `<label class="input-label" for="join-code">학급 참여 코드</label><input id="join-code" class="text-input" type="text" inputmode="numeric" maxlength="12" autocomplete="off" placeholder="숫자 4자리 코드"><label class="input-label" for="nickname">선생님께 보일 이름 (선택)</label><input id="nickname" class="text-input" maxlength="12" autocomplete="off" placeholder="이름 없이 참여할 수 있어요"><p id="join-error" class="error" role="status">${esc(ui.error)}</p><div class="actions">${btn('참여 신청하기', 'join-submit')} ${btn('처음으로', 'home', 'button light')}</div>${live ? `<hr><label class="input-label" for="return-ticket">선생님에게 받은 일회용 복귀 코드</label><input id="return-ticket" class="text-input" autocomplete="off" maxlength="80"><div class="actions">${btn('내 기록 이어받기', 'redeem-ticket', 'button secondary')}</div>` : ''}` : `<div class="notice"><strong>${state === 'pending' ? '승인을 기다리고 있어요.' : `우리 반 별명: ${esc(service.memory.classAlias)}`}</strong><br>${state === 'pending' ? `대조 표식 ${esc(service.memory.checkMark || '')} · 승인 전에는 혼자 연습만 할 수 있어요.` : live ? '선생님이 승인했어요.' : '선생님이 확인한 모의 참여 상태예요.'}</div><p class="error" role="status">${esc(ui.error)}</p><div class="actions">${state === 'pending' ? (live ? btn('승인 상태 다시 확인', 'refresh-status', 'button secondary') : btn('선생님 승인 체험', 'approve-demo', 'button secondary')) : btn('기록 도전 계속', 'record')} ${btn('혼자 연습하기', 'practice', 'button light')} ${btn('처음으로', 'home', 'button light')}</div>`}</section>`;
+  const joined=service.memory.approved;
+  return `<section class="panel"><div class="eyebrow">우리 반과 함께</div><h1>학급 참여</h1>${joined ? `<div class="notice"><strong>학급에 참여했어요.</strong><br>${service.memory.privateName ? `이름: ${esc(service.memory.privateName)}<br>` : ''}우리 반 별명: ${esc(service.memory.classAlias)}</div><div class="actions">${btn('기록 도전 계속','record')} ${btn('처음으로','home','button light')}</div>` : `<p>선생님이 알려 준 코드를 입력하면 바로 참여해요.</p><label class="input-label" for="join-code">학급 참여 코드</label><input id="join-code" class="text-input" type="text" inputmode="numeric" maxlength="12" autocomplete="off" placeholder="숫자 4자리 코드"><label class="input-label" for="nickname">선생님께 보일 이름 (선택)</label><input id="nickname" class="text-input" maxlength="12" autocomplete="off" placeholder="이름 없이 참여할 수 있어요"><div class="actions">${btn('학급 참여하기','join-submit')} ${btn('처음으로','home','button light')}</div>${live ? `<hr><label class="input-label" for="return-ticket">선생님에게 받은 일회용 복귀 코드</label><input id="return-ticket" class="text-input" autocomplete="off" maxlength="80"><div class="actions">${btn('내 기록 이어받기','redeem-ticket','button secondary')}</div>` : ''}`}<p id="join-error" class="error" role="status">${esc(ui.error)}</p></section>`;
 }
 function introView() {
   const regular = ui.mode === 'regular';
@@ -507,15 +508,14 @@ root.addEventListener('click', async e => {
   else if (action === 'join') { ui.view = 'join'; ui.error = ''; render(); }
   else if (action === 'join-submit') {
     const code = root.querySelector('#join-code').value, nickname = root.querySelector('#nickname').value.trim();
-    ui.busy = true; try { const result = await service.joinClass(code, nickname); if (result.status !== 'pending') ui.error = '참여 코드를 확인해 주세요.'; else ui.error = ''; }
-    catch { ui.error = '참여 신청을 확인하지 못했어요. 다시 시도해 주세요.'; }
+    ui.busy = true; try { const result = await service.joinClass(code, nickname); if (result.status !== 'approved') ui.error = '참여 코드를 확인해 주세요.'; else ui.error = ''; }
+    catch { ui.error = '학급에 참여하지 못했어요. 코드를 확인하거나 선생님께 문의해 주세요.'; }
     finally { ui.busy = false; render(); }
   }
-  else if (action === 'approve-demo') { await service.approveDemo(); render(); }
   else if (action === 'redeem-ticket') { ui.busy = true; try { await service.redeemTicket(root.querySelector('#return-ticket').value.trim()); ui.error = ''; } catch { ui.error = '복귀 코드를 확인하지 못했어요. 선생님께 새 코드를 받아 주세요.'; } finally { ui.busy = false; render(); } }
   else if (action === 'refresh-status') { ui.busy = true; try { await service.refreshStatus(); ui.error = ''; } catch { ui.error = '승인 상태를 확인하지 못했어요.'; } finally { ui.busy = false; render(); } }
   else if (action === 'switch-student') { ui.busy = true; try { await service.switchStudent(); session = null; ui.view = 'home'; ui.board = null; ui.error = ''; } catch { ui.error = '학생 바꾸기를 완료하지 못했어요. 네트워크를 확인해 주세요.'; } finally { ui.busy = false; render(); loadBoard(); } }
-  else if (action === 'practice' || action === 'record') { ui.mode = action === 'record' ? 'regular' : 'practice'; ui.view = 'intro'; render(); }
+  else if (action === 'practice' || action === 'record') { ui.busy = true; try { if (live && action === 'record') { await service.refreshStatus(); if (!service.memory.approved) { ui.view = 'join'; ui.error = '학급 소속을 확인해 주세요. 선생님께 문의해 주세요.'; render(); return; } } ui.mode = action === 'record' ? 'regular' : 'practice'; ui.view = 'intro'; } catch { ui.error = '학급 연결을 확인하지 못했어요. 다시 시도해 주세요.'; } finally { ui.busy = false; render(); } }
   else if (action === 'start-now') {
     ui.busy = true; try { if (ui.mode === 'regular') await service.setGlobalParticipation(root.querySelector('#global-setting').checked); session = await service.startSession(GAME.gameId, { mode: ui.mode }); ui.draft = ''; ui.view = session.status === 'playing' ? 'playing' : 'result'; ui.error = ''; } catch { ui.error = '시작 상태를 확인하지 못했어요. 다시 시도해 주세요.'; } finally { ui.busy = false; render(); }
   }

@@ -43,19 +43,23 @@ test('teacher approval and a full official round work in Chromium', { timeout: 2
     await s.goto(`${origin}/1math3.html`);
     await s.getByRole('button', { name: '학급 참여하기' }).click();
     await s.getByLabel('학급 참여 코드').fill(code);
-    await s.getByRole('button', { name: '참여 신청하기' }).click();
-    await s.getByText('승인을 기다리고 있어요.').waitFor();
-    await t.getByRole('button', { name: '새로고침' }).click();
-    await t.getByRole('tab', { name: /승인 대기/ }).click();
-    await t.getByRole('button', { name: '승인', exact: true }).click();
-    await t.getByText('학생을 승인했습니다.').waitFor();
+    await s.getByRole('button', { name: '학급 참여하기' }).click();
+    await s.getByText('학급에 참여했어요.').waitFor();
+    await t.getByRole('button',{name:'새로고침'}).click();
+    await t.getByRole('tab',{name:/학생 1/}).click();
+    await t.getByRole('button',{name:'이름 변경',exact:true}).click();
+    await t.getByLabel('새 학생 이름').fill('교사변경이름');
+    await t.getByRole('button',{name:'이름 저장',exact:true}).click();
+    await t.getByText('학생 이름을 변경했습니다.').waitFor();
+    await t.locator('#student-rows').getByText('교사변경이름',{exact:true}).waitFor();
     await t.getByRole('button', { name: /두 번째 반/ }).click();
     await t.getByRole('tab', { name: /학생 0/ }).waitFor();
-    await t.getByRole('tab', { name: /승인 대기 0/ }).click();
-    await t.getByText('참여 신청을 기다리는 학생이 없습니다.').waitFor();
+    await t.getByRole('tab', { name: /학생 0/ }).click();
+    await t.getByText('소속 학생이 없습니다.').waitFor();
     await t.getByRole('button', { name: /브라우저 검증반/ }).click();
-    await s.getByRole('button', { name: '승인 상태 다시 확인' }).click();
-    await s.getByRole('button', { name: '기록 도전 계속' }).click();
+    await s.reload();
+    await s.getByText('내 이름: 교사변경이름',{exact:true}).waitFor();
+    await s.getByRole('button', { name: '기록 도전 시작' }).click();
     await s.getByRole('button', { name: '시작하기' }).click();
     try { await s.getByText('1 / 50').waitFor(); }
     catch (error) { throw new Error(`Game did not start: ${(await s.locator('body').innerText()).slice(0, 500)}`, { cause: error }); }

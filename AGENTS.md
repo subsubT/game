@@ -5,7 +5,7 @@
 - 현재 Google OAuth Client/Drive/Sheets를 그대로 사용한다. 별도 production 환경 생성, 이름 변경, 데이터 이전은 하지 않는다.
 - Pages는 `.github/workflows/pages.yml`과 `tools/build-pages.mjs`의 정적 파일 allowlist로 게시한다. 공개 설정은 `config/pages-public.json`이다. 서버 소스/문서/테스트/로컬 인증/증거/비공개 자료는 산출물에서 제외한다.
 - 이번 작업은 GitHub Pages 배포다. 아래 Vercel 식별자는 기존 1math2 서비스의 이력이며 이번 Pages 배포 대상을 뜻하지 않는다. Supabase는 사용하지 않는다.
-- CP5 최종 PASS는 실제 Pages 학생/교사/Firebase/Worker/Google 전체 검증 후에만 기록한다. 기존 데이터 삭제와 접근 통제 완화는 하지 않는다.
+- CP5 최종 PASS는 실제 Pages 학생/교사/Firebase/Worker/Google 전체 검증 후에만 기록한다. 2026-10-13 사용자 요청으로 학생의 교사 승인 절차를 없애고 코드 입력 즉시 소속되도록 변경한다. 교사에게 학생 삭제·이름 변경 기능을 제공하며, 삭제는 소속·권한·순위를 해제하고 복원용 기록을 보관한다. 그 외 기존 권한 경계는 유지한다.
 
 # 기존 1math2 프로젝트 지침
 

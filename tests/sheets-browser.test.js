@@ -51,7 +51,7 @@ test('Chromium upgrades a legacy class to four digits and preserves Google opt-i
     await page.getByText('연결 안 됨',{exact:true}).waitFor();
     assert.match((await page.locator('.code').textContent()).trim(),/^[0-9]{4}$/);
     assert.equal([...db.rows.keys()].filter(key=>key.startsWith('joinCodeBackups/')).length,1);
-    await page.getByRole('tab',{name:/승인 대기/}).click();await page.getByText('참여 신청을 기다리는 학생이 없습니다.').waitFor();
+    await page.getByRole('tab',{name:/학생 0/}).click();await page.getByText('소속 학생이 없습니다.').waitFor();
     await page.getByRole('button',{name:'Google 연결',exact:true}).click();
     try { await page.getByText('Google 연결이 완료되었습니다.',{exact:false}).waitFor(); }
     catch { const url=new URL(page.url());throw Error(`OAuth UI stopped at ${url.origin}${url.pathname}: ${await page.content()}`); }
@@ -70,7 +70,7 @@ test('Chromium upgrades a legacy class to four digits and preserves Google opt-i
     await page.getByRole('button',{name:'지금 동기화'}).click();await page.getByText('학급 관리표 동기화를 완료했습니다.').waitFor();assert.equal(google.creates,1);
     google.writeFailure='GOOGLE_UNAVAILABLE';await page.getByRole('button',{name:'지금 동기화'}).click();await page.locator('#message').getByText('게임 기록은 정상 보관됩니다.',{exact:false}).waitFor();
     await page.getByRole('button',{name:'새로고침',exact:true}).click();await page.getByText('동기화 실패',{exact:true}).waitFor();
-    await page.getByRole('tab',{name:/학생 0/}).click();await page.getByText('승인된 학생이 없습니다.').waitFor();
+    await page.getByRole('tab',{name:/학생 0/}).click();await page.getByText('소속 학생이 없습니다.').waitFor();
     await page.getByRole('button',{name:'Google 연결 해제'}).click();await page.getByRole('group',{name:'Google 연결 해제 확인'}).waitFor();
     assert.equal(google.revoked.length,0);await page.getByRole('button',{name:'계속 연결',exact:true}).click();assert.equal(google.revoked.length,0);
     assert.equal(db.rows.get(`sheetConnections/${space.teacherId}`).status,'connected');

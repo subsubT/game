@@ -7,7 +7,7 @@ const dateLabel = value => value ? new Intl.DateTimeFormat('ko-KR', { timeZone: 
 const empty = text => `<p class="empty">${escapeHtml(text)}</p>`;
 const nameOf = s => s?.privateName || s?.classAlias || '이름 없음';
 const typeNames = { add_three_small: '세 수 덧셈', subtract_three_small: '세 수 뺄셈', make_ten: '10 만들기', subtract_from_ten: '10에서 빼기', make_ten_then_add: '10 만들고 더하기' };
-const state = { classes: [], selected: null, pending: [], students: [], sessions: [], board: [], season: todaySeason(), tab: 'home', studentId: null, sessionId: null, details: null, recoveryKey: '', ticket: null, busy: false, loadVersion: 0, error: '', google: null, googleDisconnectPending: false };
+const state = { classes: [], selected: null, pending: [], students: [], sessions: [], board: [], season: todaySeason(), tab: 'home', studentId: null, sessionId: null, details: null, recoveryKey: '', ticket: null, busy: false, loadVersion: 0, error: '', google: null, googleDisconnectPending: false, editingStudent: null };
 let call, auth, authSdk;
 
 function say(text, error = false) {
@@ -31,7 +31,7 @@ function errorText(error) {
   if (code.includes('AUTH') || code.includes('UNAUTHENTICATED')) return '인증이 만료되었습니다. 화면을 새로고침해 다시 연결하세요.';
   if (code.includes('RATE_LIMITED') || code.includes('RESOURCE_EXHAUSTED')) return '요청이 너무 많습니다. 잠시 후 다시 시도하세요.';
   if (code === 'JOIN_CODE_BUSY') return '참여 코드 발급이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.';
-  if (code.includes('INVALID_NAME')) return '학급 이름을 확인해 주세요.';
+  if (code.includes('INVALID_NAME')) return '이름은 1~12자로 입력해 주세요.';
   if (code.includes('NOT_FOUND')) return '해당 자료를 찾을 수 없습니다. 새로고침해 주세요.';
   if (code.includes('NETWORK') || code.includes('FETCH')) return '네트워크 연결을 확인하고 다시 시도하세요.';
   return '요청을 완료하지 못했습니다. 잠시 후 다시 시도하세요.';
@@ -83,13 +83,12 @@ function renderShell() {
   app.innerHTML = `${recoveryNotice()}<div class="layout"><aside class="card sidebar"><h2>내 학급</h2><div class="class-list">${choices || '<p class="muted">아직 학급이 없습니다.</p>'}</div><form id="create-class"><div class="field"><label for="class-label">비공개 학급 이름</label><input id="class-label" maxlength="12" required placeholder="예: 1학년 2반"></div><button class="button secondary">학급 만들기</button></form>${renderSheets()}</aside><div class="content">${cls ? renderClass(cls) : `<section class="card"><h2>첫 학급을 만들어 주세요</h2><p>왼쪽에서 학급을 만든 뒤 참여 코드를 학생에게 알려 주세요.</p></section>`}</div></div>`;
 }
 function renderClass(cls) {
-  const tabs = [['home','한눈에 보기'],['pending',`승인 대기 ${state.pending.length}`],['students',`학생 ${state.students.length}`],['records','학생 기록'],['rank','학급 순위']];
-  return `<div class="heading-row"><div><p class="muted small">현재 선택한 학급</p><h2>${escapeHtml(cls.privateLabel)}</h2></div><button class="button secondary small" data-action="refresh">새로고침</button></div><div class="summary"><div class="stat">참여 상태<strong>${cls.joinEnabled ? '열림' : '닫힘'}</strong></div><div class="stat">승인 학생<strong>${state.students.length}명</strong></div><div class="stat">승인 대기<strong>${state.pending.length}명</strong></div><div class="stat">완료 기록<strong>${state.sessions.filter(s=>s.completion==='complete').length}회</strong></div></div><div class="tabs" role="tablist" aria-label="학급 관리">${tabs.map(([id,label])=>`<button role="tab" class="tab" data-action="tab" data-tab="${id}" aria-selected="${state.tab===id}">${label}</button>`).join('')}</div><div role="tabpanel">${renderTab(cls)}</div>`;
+  const tabs = [['home','한눈에 보기'],['students',`학생 ${state.students.length}`],['records','학생 기록'],['rank','학급 순위']];
+  return `<div class="heading-row"><div><p class="muted small">현재 선택한 학급</p><h2>${escapeHtml(cls.privateLabel)}</h2></div><button class="button secondary small" data-action="refresh">새로고침</button></div><div class="summary"><div class="stat">참여 상태<strong>${cls.joinEnabled ? '열림' : '닫힘'}</strong></div><div class="stat">소속 학생<strong>${state.students.length}명</strong></div><div class="stat">완료 기록<strong>${state.sessions.filter(s=>s.completion==='complete').length}회</strong></div></div><div class="tabs" role="tablist" aria-label="학급 관리">${tabs.map(([id,label])=>`<button role="tab" class="tab" data-action="tab" data-tab="${id}" aria-selected="${state.tab===id}">${label}</button>`).join('')}</div><div role="tabpanel">${renderTab(cls)}</div>`;
 }
 function renderTab(cls) {
-  if (state.tab === 'home') return `<div class="stack"><section class="card"><h3>학급 참여 코드</h3><p class="code">${escapeHtml(cls.code)}</p><p class="muted small">학생에게 이 코드를 알려 주고 신청 후 ‘승인 대기’에서 확인하세요. 교사 인증이나 복구에는 사용할 수 없습니다.</p><p>전체 순위 등록: <span class="pill ${cls.globalOptIn?'':'off'}">${cls.globalOptIn?'켜짐':'꺼짐'}</span> · 학생별 독립 별명을 사용하며 학급과 실제 이름은 공개되지 않습니다.</p><button class="button ${cls.globalOptIn?'danger':'secondary'}" data-action="class-global">전체 순위 등록 ${cls.globalOptIn?'해제':'복원'}</button></section><div class="two"><section class="card"><h3>지금 처리할 일</h3>${state.pending.length?`<p>승인 대기 학생 ${state.pending.length}명이 있습니다.</p><button class="button" data-action="tab" data-tab="pending">승인 대기 보기</button>`:empty('승인을 기다리는 학생이 없습니다.')}</section><section class="card"><h3>최근 게임 기록</h3>${recentRecords()}</section></div></div>`;
-  if (state.tab === 'pending') return `<section class="card"><div class="heading-row"><h3>참여 신청</h3><button class="button secondary small" data-action="refresh">다시 확인</button></div>${state.pending.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>이름</th><th>별명</th><th>대조 표식</th><th>상태</th><th>작업</th></tr></thead><tbody>${state.pending.map(s=>`<tr><td>${escapeHtml(nameOf(s))}</td><td>${escapeHtml(s.classAlias)}</td><td>${escapeHtml(s.checkMark)}</td><td><span class="pill wait">승인 대기</span></td><td><button class="button small" data-action="approve" data-id="${escapeHtml(s.studentId)}">승인</button></td></tr>`).join('')}</tbody></table></div>` : empty('참여 신청을 기다리는 학생이 없습니다.')}</section>`;
-  if (state.tab === 'students') return `<section class="card"><div class="heading-row"><h3>승인된 학생</h3><div class="field"><label for="student-search" class="visually-hidden">학생 찾기</label><input id="student-search" type="search" placeholder="이름 또는 별명 찾기" autocomplete="off"></div></div>${state.students.length?`<div class="table-wrap"><table class="data"><thead><tr><th>이름 / 별명</th><th>상태</th><th>최고 점수</th><th>최근 수행</th><th>전체 등록</th><th>작업</th></tr></thead><tbody id="student-rows">${state.students.map(s=>{const x=studentStats(s.studentId);return `<tr data-search="${escapeHtml(`${nameOf(s)} ${s.classAlias}`.toLowerCase())}"><td><strong>${escapeHtml(nameOf(s))}</strong><br><span class="muted small">${escapeHtml(s.classAlias)}</span></td><td><span class="pill">승인됨</span></td><td>${x.best===null?'—':`${x.best}점`}</td><td>${x.latest?dateLabel(x.latest.startedAt):'기록 없음'}</td><td>${s.globalOptIn?'켜짐':'꺼짐'}</td><td class="row-actions"><button class="button secondary small" data-action="student" data-id="${escapeHtml(s.studentId)}">기록 보기</button><button class="button secondary small" data-action="ticket" data-id="${escapeHtml(s.studentId)}">복귀 티켓</button></td></tr>`}).join('')}</tbody></table></div>`:empty('승인된 학생이 없습니다.')}</section>`;
+  if (state.tab === 'home') return `<div class="stack"><section class="card"><h3>학급 참여 코드</h3><p class="code">${escapeHtml(cls.code)}</p><p class="muted small">학생이 코드를 입력하면 바로 학급에 소속됩니다. 교사 인증이나 복구에는 사용할 수 없습니다.</p><p>전체 순위 등록: <span class="pill ${cls.globalOptIn?'':'off'}">${cls.globalOptIn?'켜짐':'꺼짐'}</span> · 학생별 독립 별명을 사용하며 학급과 실제 이름은 공개되지 않습니다.</p><button class="button ${cls.globalOptIn?'danger':'secondary'}" data-action="class-global">전체 순위 등록 ${cls.globalOptIn?'해제':'복원'}</button></section><div class="two"><section class="card"><h3>학생 관리</h3><p>학생 목록에서 이름을 변경하거나 학생을 삭제할 수 있습니다.</p><button class="button" data-action="tab" data-tab="students">학생 목록 보기</button></section><section class="card"><h3>최근 게임 기록</h3>${recentRecords()}</section></div></div>`;
+  if (state.tab === 'students') return `<section class="card"><div class="heading-row"><h3>소속 학생</h3>${studentEditor()}<div class="field"><label for="student-search" class="visually-hidden">학생 찾기</label><input id="student-search" type="search" placeholder="이름 또는 별명 찾기" autocomplete="off"></div></div>${state.students.length?`<div class="table-wrap"><table class="data"><thead><tr><th>이름 / 별명</th><th>상태</th><th>최고 점수</th><th>최근 수행</th><th>전체 등록</th><th>작업</th></tr></thead><tbody id="student-rows">${state.students.map(s=>{const x=studentStats(s.studentId);return `<tr data-search="${escapeHtml(`${nameOf(s)} ${s.classAlias}`.toLowerCase())}"><td><strong>${escapeHtml(nameOf(s))}</strong><br><span class="muted small">${escapeHtml(s.classAlias)}</span></td><td><span class="pill">소속됨</span></td><td>${x.best===null?'—':`${x.best}점`}</td><td>${x.latest?dateLabel(x.latest.startedAt):'기록 없음'}</td><td>${s.globalOptIn?'켜짐':'꺼짐'}</td><td class="row-actions"><button class="button secondary small" data-action="student" data-id="${escapeHtml(s.studentId)}">기록 보기</button><button class="button secondary small" data-action="ticket" data-id="${escapeHtml(s.studentId)}">복귀 티켓</button><button class="button secondary small" data-action="rename-student" data-id="${escapeHtml(s.studentId)}">이름 변경</button><button class="button danger small" data-action="remove-student" data-id="${escapeHtml(s.studentId)}">학생 삭제</button></td></tr>`}).join('')}</tbody></table></div>`:empty('소속 학생이 없습니다.')}</section>`;
   if (state.tab === 'records') return renderRecords();
   return renderRank(cls);
 }
@@ -146,13 +145,14 @@ async function loadClass() {
     if(version!==state.loadVersion||id!==state.selected)return;
     state.classes=state.classes.map(c=>c.classId===id?{...c,code:updated.code}:c);
   }
-  const [pending,students,sessions,board]=await Promise.all([
-    call('listPendingStudents',{classId:id}),call('listClassStudents',{classId:id}),
+  const [students,sessions,board]=await Promise.all([
+    call('listClassStudents',{classId:id}),
     call('listClassSessions',{classId:id,gameId:'1math3'}),call('getTeacherLeaderboard',{classId:id,seasonId:state.season}),refreshSheets()
   ]);
   if(version!==state.loadVersion||id!==state.selected)return;
-  state.pending=pending.students;state.students=students.students;state.sessions=sessions.sessions;state.board=board.entries;
+  state.students=students.students;state.sessions=sessions.sessions.filter(session=>state.students.some(student=>student.studentId===session.studentId));state.board=board.entries;
   if(!state.students.some(s=>s.studentId===state.studentId)){state.studentId=null;state.sessionId=null;state.details=null;}
+  if(!state.students.some(s=>s.studentId===state.editingStudent))state.editingStudent=null;
   renderShell();
 }
 async function work(fn, success) {
@@ -195,6 +195,7 @@ async function initialize() {
 
 app.addEventListener('submit',event=>{
   event.preventDefault();const form=event.target;
+  if(form.id==='rename-student')work(async()=>{await call('renameStudent',{classId:state.selected,studentId:state.editingStudent,privateName:form.querySelector('#student-name').value.trim(),requestId:crypto.randomUUID()});state.editingStudent=null;await loadClass();},'학생 이름을 변경했습니다.');
   if(form.id==='create-class')work(async()=>{const label=form.querySelector('#class-label').value.trim();const c=await call('createClass',{privateLabel:label,requestId:crypto.randomUUID()});state.tab='home';await refreshClasses(c.classId);},'새 학급을 만들었습니다.');
   if(form.id==='recover-space')work(async()=>{const key=form.querySelector('#recovery').value.trim();const result=await call('recoverTeacherSpace',{recoveryKey:key,requestId:crypto.randomUUID()});form.reset();state.recoveryKey=result.recoveryKey;await refreshClasses();},'관리 공간을 복구했습니다. 새 복구 키를 보관하세요.');
 });
@@ -231,7 +232,12 @@ app.addEventListener('click',event=>{
   if(action==='select-class'){state.googleDisconnectPending=false;state.selected=id;state.tab='home';state.studentId=null;state.sessionId=null;state.details=null;work(()=>loadClass());}
   if(action==='refresh')work(async()=>{await refreshClasses(state.selected);},'학급 자료를 새로 읽었습니다.');
   if(action==='tab'){state.tab=button.dataset.tab;work(()=>loadClass());}
-  if(action==='approve')work(async()=>{const classId=state.selected;await call('approveStudent',{classId,studentId:id});const [pending,students]=await Promise.all([call('listPendingStudents',{classId}),call('listClassStudents',{classId})]);if(classId===state.selected){state.pending=pending.students;state.students=students.students;renderShell();}},'학생을 승인했습니다.');
+  if(action==='rename-student'){state.editingStudent=id;renderShell();app.querySelector('#student-name')?.focus();}
+  if(action==='rename-cancel'){state.editingStudent=null;renderShell();}
+  if(action==='remove-student'){
+    const student=state.students.find(s=>s.studentId===id);if(!student||!confirm(`${nameOf(student)} 학생을 학급과 순위에서 삭제할까요? 학급 이용 권한이 해제되며, 학습 기록은 복원용으로 보관됩니다.`))return;
+    work(async()=>{await call('removeStudent',{classId:state.selected,studentId:id,requestId:crypto.randomUUID()});await loadClass();},'학생을 학급에서 삭제했습니다.');
+  }
   if(action==='student'){state.studentId=id;state.sessionId=null;state.details=null;state.tab='records';renderShell();}
   if(action==='session')work(async()=>{const classId=state.selected;state.sessionId=id;state.details=null;renderShell();const result=await call('getSessionDetails',{classId,sessionId:id});if(classId===state.selected&&id===state.sessionId){state.details=result;renderShell();}});
   if(action==='class-global'){
@@ -251,3 +257,9 @@ setInterval(async()=>{
   await refreshSheets();
   const panel=document.querySelector('#sheets-panel');if(panel&&!state.busy)panel.outerHTML=renderSheets();
 },30000);
+
+function studentEditor(){
+  const student=state.students.find(s=>s.studentId===state.editingStudent);
+  if(!student)return '';
+  return `<form id="rename-student" class="notice"><p>${escapeHtml(nameOf(student))} 학생 이름 변경</p><div class="field"><label for="student-name">새 학생 이름</label><input id="student-name" maxlength="12" required value="${escapeHtml(student.privateName || '')}"></div><button class="button small" type="submit">이름 저장</button> <button class="button secondary small" type="button" data-action="rename-cancel">취소</button></form>`;
+}
