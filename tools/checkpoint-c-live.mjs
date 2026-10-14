@@ -1,0 +1,40 @@
+// Opt-in live tests use only new, labelled synthetic fixtures; never print credentials.
+import {readFile,writeFile} from 'node:fs/promises';
+import {liveApiKey} from '../tests/live-config.js';
+import {defaultProgressUI} from '../src/games/session-progress.js';
+const dir='.cp5-test-artifacts/checkpoint-c',origin='https://subsubt.github.io',worker='https://math3-cp3-dev.subsubt-math3-dev.workers.dev';
+const id=()=>crypto.randomUUID();let stage='initialization';
+const check=(ok,reason)=>{if(!ok)throw Error(reason);};
+export async function account(){const r=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${await liveApiKey()}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({returnSecureToken:true})});const a=await r.json();check(r.ok,'anonymous authentication failed');return a;}
+export async function call(a,name,data={},expected){const r=await fetch(worker+'/api/'+name,{method:'POST',headers:{origin,authorization:'Bearer '+a.idToken,'content-type':'application/json'},body:JSON.stringify({data}),signal:AbortSignal.timeout(60000)});const v=await r.json();if(expected){check(!r.ok&&v.error?.code===expected,`${name}: expected ${expected}, received ${v.error?.code||r.status}`);return;}check(r.ok,`${name}: ${v.error?.code||r.status}`);return v.result;}
+export const answerOf=q=>q.typeId==='subtract_three_small'?q.operands[0]-q.operands[1]-q.operands[2]:q.typeId==='make_ten'?10-q.operands[0]:q.typeId==='subtract_from_ten'?10-q.operands[1]:q.operands.reduce((a,b)=>a+b,0);
+export async function answer(a,s){let q=s.questions[s.currentIndex];if(q.step==='pair'){const p=[[0,1],[0,2],[1,2]].find(([x,y])=>q.operands[x]+q.operands[y]===10);s=(await call(a,'submitAnswer',{sessionId:s.sessionId,questionId:q.id,response:p,expectedRevision:s.revision,requestId:id()})).session;q=s.questions[s.currentIndex];}return(await call(a,'submitAnswer',{sessionId:s.sessionId,questionId:q.id,response:answerOf(q),expectedRevision:s.revision,requestId:id()})).session;}
+async function main(){
+ const mode=process.argv[2],checks=[];const pass=x=>{checks.push(x);console.log(x+' PASS');};
+ if(mode==='prepare'){
+  stage='synthetic legacy preparation';const a=await account();await call(a,'requestJoin',{code:'1409',privateName:'C전환가상',requestId:id()});const status=await call(a,'getStudentStatus');let s=await call(a,'startSession',{gameId:'1math3',mode:'regular',requestId:id()});s=await answer(a,s);
+  await writeFile(dir+'/legacy-fixture.json',JSON.stringify({a,status,s,pin:String(1000+Math.floor(Math.random()*9000))}),{flag:'wx'});pass('pre-deployment legacy one-answer fixture');return;
+ }
+ check(mode==='verify','unsupported mode');
+ stage='legacy migration';const f=JSON.parse(await readFile(dir+'/legacy-fixture.json','utf8'));
+ const initial=await call(f.a,'getStudentStatus');
+ if(initial.status==='pin-required')await call(f.a,'setStudentPin',{pin:f.pin,pinConfirm:f.pin,requestId:id()});
+ else if(initial.status==='new'){const r=await call(f.a,'getClassLoginRoster',{code:'1409'});await call(f.a,'loginStudentPin',{grant:r.grant,studentId:r.students.find(x=>x.privateName==='C전환가상').studentId,pin:f.pin,requestId:id()});}
+ const status=await call(f.a,'getStudentStatus');check(status.classAlias===f.status.classAlias,'student identity changed');const initialRoster=await call(f.a,'getClassLoginRoster',{code:'1409'});status.studentId=initialRoster.students.find(x=>x.privateName==='C전환가상').studentId;status.classId=JSON.parse(Buffer.from(initialRoster.grant.split('.')[0],'base64url')).classId;
+ let s=await call(f.a,'getSession',{sessionId:f.s.sessionId});check(s.currentIndex===1&&s.questions[0].earnedPoints===f.s.questions[0].earnedPoints,'legacy answer/score changed');
+ const request={sessionId:s.sessionId,expectedRevision:s.revision,uiState:defaultProgressUI(s),requestId:id()};
+ const saved=await Promise.all([call(f.a,'saveSession',request),call(f.a,'saveSession',request)]);check(saved[0].session.revision===saved[1].session.revision,'duplicate save revision changed');s=saved[0].session;check(s.progressState==='paused'&&s.timer.policy==='unlimited','save/time policy');pass('legacy identity/answer preservation and concurrent idempotent save');
+ stage='PIN device transfer';const b=await account(),roster=await call(b,'getClassLoginRoster',{code:'1409'});await call(b,'loginStudentPin',{grant:roster.grant,studentId:status.studentId,pin:f.pin,requestId:id()});
+ await call(f.a,'getSession',{sessionId:s.sessionId},'PENDING_APPROVAL');s=await call(b,'getSession',{sessionId:s.sessionId});check(s.currentIndex===1,'device progress lost');
+ const stale=s.revision;s=await call(b,'resumeSession',{sessionId:s.sessionId,expectedRevision:s.revision,requestId:id()});await call(b,'saveSession',{sessionId:s.sessionId,expectedRevision:stale,uiState:defaultProgressUI(s),requestId:id()},'REVISION_CONFLICT');pass('device revocation and stale write conflict');
+ stage='cross-student access';const peer=await account();const pin='8362';await call(peer,'requestJoin',{code:'1409',privateName:'C가상격리',pin,pinConfirm:pin,requestId:id()});await call(peer,'getSession',{sessionId:s.sessionId},'FORBIDDEN');await call(peer,'saveSession',{sessionId:s.sessionId,expectedRevision:s.revision,uiState:defaultProgressUI(s),requestId:id()},'SESSION_NOT_ACTIVE');await call(peer,'setStudentPin',{pin:'7642',pinConfirm:'7642',requestId:id()},'PIN_ALREADY_SET');pass('other student read/write/PIN takeover denied');
+ stage='synthetic teacher management';const t=await account();await call(t,'createTeacherSpace',{requestId:id()});const cls=await call(t,'createClass',{privateLabel:'C권한검증',requestId:id()});await call(t,'setClassGlobalParticipation',{classId:cls.classId,enabled:false});
+ await call(t,'getSessionDetails',{classId:status.classId,sessionId:s.sessionId},'FORBIDDEN');const x=await account();await call(x,'requestJoin',{code:cls.code,privateName:'C삭제가상',pin,pinConfirm:pin,requestId:id()});const xs=await call(x,'getStudentStatus');xs.studentId=(await call(t,'listClassStudents',{classId:cls.classId})).students[0].studentId;const params={classId:cls.classId,studentId:xs.studentId};
+ await call(t,'renameStudent',{...params,privateName:'C이름변경',requestId:id()});check((await call(x,'getStudentStatus')).privateName==='C이름변경','rename failed');
+ await call(t,'changeStudentPin',{...params,pin:'7642',pinConfirm:'7642',requestId:id()});await call(x,'getStudentGames',{},'PENDING_APPROVAL');
+ const y=await account(),ry=await call(y,'getClassLoginRoster',{code:cls.code});await call(y,'loginStudentPin',{grant:ry.grant,studentId:xs.studentId,pin:'7642',requestId:id()});await call(t,'changeStudentPin',{...params,reset:true,requestId:id()});await call(y,'getStudentGames',{},'PENDING_APPROVAL');
+ const ticket=await call(t,'issueStudentReturnTicket',params),z=await account();await call(z,'redeemStudentReturnTicket',{ticket:ticket.ticket,requestId:id()});await call(z,'setStudentPin',{pin,pinConfirm:pin,requestId:id()});await call(t,'removeStudent',{...params,requestId:id()});await call(z,'getStudentGames',{},'PENDING_APPROVAL');pass('teacher rename/PIN change/reset/ticket and synthetic removal');
+ stage='PIN brute force lock';const attacker=await account(),ra=await call(attacker,'getClassLoginRoster',{code:'1409'}),pstatus={studentId:ra.students.find(x=>x.privateName==='C가상격리').studentId};for(let n=0;n<5;n++)await call(attacker,'loginStudentPin',{grant:ra.grant,studentId:pstatus.studentId,pin:'0000',requestId:id()},'LOGIN_FAILED');await call(attacker,'loginStudentPin',{grant:ra.grant,studentId:pstatus.studentId,pin,requestId:id()},'LOGIN_FAILED');pass('per-student persistent PIN guessing lock');
+ await writeFile(dir+'/live-api.json',JSON.stringify({checkedAt:new Date().toISOString(),checks},null,2));await writeFile(dir+'/legacy-fixture-after.json',JSON.stringify({account:b,status,session:s}));
+}
+if(process.argv[1]?.endsWith('checkpoint-c-live.mjs'))main().catch(e=>{console.error(JSON.stringify({stage,failure:e.message}));process.exitCode=1;});
