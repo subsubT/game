@@ -1,5 +1,13 @@
 # 개발 상태 및 Checkpoint 인계
 
+## 2026-10-14 — Checkpoint B PASS (개발 검증) — 여기서 중단
+
+`codex/game-save-checkpoint-b`는 A의 `7b89e2c`를 이어받아 게임 선택 포털, 1MATH3 진입/이어하기, 임의 시점 저장·로그아웃·기기 변경 후 복원을 구현했다. 사용자 답변대로 **시간 제한 없음**을 유지한다. 새 회차와 저장으로 전환한 회차는 24시간 후 소실되지 않도록 보존하며 기존 완료/만료 기록은 다시 열지 않는다. 점수·문제·답안은 서버 원장을 유지하고 미확정 숫자/카드/단계만 검증해서 별도로 저장한다. 중간 저장은 순위/Sheets 완료 회차에 포함하지 않는다. 교사 화면도 진행 중/중간 저장/완료를 구분하고 기존 이름·삭제·PIN 관리와 상세 조회를 유지한다.
+
+단위·보안 78개, 실제 로컬 Worker/Firestore REST 3개, Firebase Auth/Functions/Rules API와 50문항 Chromium 회귀, PIN·Sheets 모의 브라우저, 포털/순위/자유 저장/응답 유실·전송 실패/새로고침/다른 기기/카드 선택·부분 합/최종 완료 단일 기록 브라우저 검사 PASS. 실제 Firebase 초기 연결이 로그인 화면을 덮어쓰는 레이스를 수정했고 같은 환경에서 재검사했다. Worker dry-run/생성물/Pages allowlist/비밀값 패턴/기존 3개 게임 보존도 확인했다. **B의 구현·개발 검사 PASS이며 main/실제 공개 반영은 아직 하지 않았다.** [B 상세와 C 인계](CHECKPOINT_B_GAME_PROGRESS.md).
+
+다음 대화는 C: 기존 `math3-dev` / `math3-cp3-dev` / Google OAuth/Drive/Sheets / Pages에서 A+B 전체를 실제 통합 검증하고, 백업·배포 호환·권한/비밀값·로그·도름스체크를 확인한 뒤 main/공개 서비스에 반영한다. 이전 Worker로 단순 롤백하면 PIN·paused/null-expiry 데이터 호환이 깨질 수 있으므로 B 문서의 복구 기준을 따른다. 신규 프로젝트·Supabase·Vercel 배포는 하지 않는다.
+
 ## 2026-10-14 — 새 개편 Checkpoint A PASS (개발 검증) — 여기서 중단
 
 `codex/student-pin-checkpoint-a`에서 학급 코드→이름 선택→4자리 PIN 로그인, 신규 이름/PIN 확인 등록, 교사 PIN 변경·초기화, 기존 활성 기기/교사 티켓을 통한 안전한 PIN 전환을 구현했다. 학생 ID/학습 원장/점수/별명은 유지한다. 이름·코드만으로 기존 계정의 PIN을 설정하지 못하며 새 기기 로그인/교사 PIN 변경/학생 삭제 후 이전 권한은 차단한다. 서버 전용 salt/pepper 검증, 영구 오답 잠금과 UID·네트워크·학생·서비스 공통 제한, 변경 전 백업을 사용한다.

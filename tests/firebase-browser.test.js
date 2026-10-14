@@ -44,7 +44,8 @@ test('teacher approval and a full official round work in Chromium', { timeout: 2
     await s.getByRole('button', { name: '학급 참여하기' }).click();
     await s.getByLabel('학급 코드', {exact:true}).fill(code);
     await s.getByRole('button', { name: '우리 반 이름 보기' }).click();
-    await s.getByRole('button', { name: '처음 왔어요 · 새 이름 등록' }).click();
+    try { await s.getByRole('button', { name: '처음 왔어요 · 새 이름 등록' }).click(); }
+    catch(error) { throw new Error(`Roster did not load: ${(await s.locator('body').innerText()).slice(0,1000)}`,{cause:error}); }
     await s.getByLabel('내 이름', {exact:true}).fill('검증학생');
     await s.getByLabel('숫자 4자리 비밀번호', {exact:true}).fill('4826');
     await s.getByLabel('비밀번호 한 번 더').fill('4826');
@@ -64,7 +65,7 @@ test('teacher approval and a full official round work in Chromium', { timeout: 2
     await t.getByRole('button', { name: /브라우저 검증반/ }).click();
     await s.reload();
     await s.getByText('내 이름: 교사변경이름',{exact:true}).waitFor();
-    await s.getByRole('button', { name: '기록 도전 시작' }).click();
+    await s.getByRole('button', { name: '게임 고르기' }).click();
     await s.getByRole('button', { name: '시작하기', exact: true }).click();
     try { await s.getByText('1 / 50').waitFor(); }
     catch (error) { throw new Error(`Game did not start: ${(await s.locator('body').innerText()).slice(0, 500)}`, { cause: error }); }
@@ -83,7 +84,7 @@ test('teacher approval and a full official round work in Chromium', { timeout: 2
       }
       await s.getByRole('button', { name: '건너뛰기 확정' }).click();
       await s.getByText('건너뛰었어요.').waitFor();
-      if (index === 1) { await s.reload(); await s.getByText('건너뛰었어요.').waitFor(); }
+      if (index === 1) { await s.reload(); await s.getByRole('button',{name:'이어서 하기'}).click(); await s.getByText('건너뛰었어요.').waitFor(); }
       await s.getByRole('button', { name: index === 50 ? '결과 보기' : '다음 문제' }).click();
       if (index % 10 === 0 && index < 50) await s.getByRole('button', { name: '계속 풀기' }).click();
     }

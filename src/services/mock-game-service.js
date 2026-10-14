@@ -1,4 +1,5 @@
 import { GAME, buildSession, evaluateStep, skipQuestion, summarize } from '../games/1math3/core.js';
+import { checkedProgressUI } from '../games/session-progress.js';
 
 const STORAGE_KEY = '1math3.mock.v1';
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -7,6 +8,8 @@ const currentSeason = () => { const p = new Intl.DateTimeFormat('en-CA', { timeZ
 export class GameService {
   async startSession(_gameId, options = {}) { throw new Error('Not implemented'); }
   async getSession(_sessionId) { throw new Error('Not implemented'); }
+  async saveSession(_sessionId, _uiState) { throw new Error('Not implemented'); }
+  async resumeSession(_sessionId) { throw new Error('Not implemented'); }
   async submitAnswer(_sessionId, _questionId, _response, _requestId) { throw new Error('Not implemented'); }
   async skipAnswer(_sessionId, _questionId, _requestId) { throw new Error('Not implemented'); }
   async finishSession(_sessionId, _reason, _requestId) { throw new Error('Not implemented'); }
@@ -31,12 +34,14 @@ export class MockGameService extends GameService {
     this.memory.session = session; this.persist(); return clone(session);
   }
   async getSession(id) { const s = this.memory.session; return s?.sessionId === id ? clone(s) : null; }
+  async saveSession(id, uiState) { const s = this.requireSession(id); s.uiState = checkedProgressUI(s, uiState); s.progressState = 'paused'; s.savedAt = new Date().toISOString(); this.persist(); return clone(s); }
+  async resumeSession(id) { const s = this.requireSession(id); s.progressState = 'running'; this.persist(); return clone(s); }
   async submitAnswer(id, questionId, response, requestId) {
     const key = `${id}/${requestId}`; if (this.inflight.has(key)) return this.inflight.get(key);
     const previous = this.memory.requests?.[key]; if (previous) { if (previous.fingerprint !== JSON.stringify([questionId, response])) throw new Error('REQUEST_CONFLICT'); return clone(previous.result); }
     const promise = Promise.resolve().then(() => {
       const s = this.requireSession(id), q = this.current(s, questionId); const result = evaluateStep(q, response);
-      if (result.accepted) { s.feedbackIndex = q.index; if (result.final) s.currentIndex++; }
+      if (result.accepted) { s.uiState = null; s.feedbackIndex = q.index; if (result.final) s.currentIndex++; }
       const output = { ...clone(result), session: clone(s) };
       if (result.accepted) { this.memory.requests ||= {}; this.memory.requests[key] = { fingerprint: JSON.stringify([questionId, response]), result: clone(output) }; this.persist(); }
       return output;
@@ -46,7 +51,7 @@ export class MockGameService extends GameService {
   async skipAnswer(id, questionId, requestId) {
     const key = `${id}/${requestId}`; if (this.inflight.has(key)) return this.inflight.get(key);
     const previous = this.memory.requests?.[key]; if (previous) { if (previous.fingerprint !== JSON.stringify([questionId, 'skip'])) throw new Error('REQUEST_CONFLICT'); return clone(previous.result); }
-    const p = Promise.resolve().then(() => { const s = this.requireSession(id), q = this.current(s, questionId); const accepted = skipQuestion(q); if (accepted) { s.feedbackIndex = q.index; s.currentIndex++; } const output = { accepted, session: clone(s), item: clone(q) }; if (accepted) { this.memory.requests ||= {}; this.memory.requests[key] = { fingerprint: JSON.stringify([questionId, 'skip']), result: clone(output) }; this.persist(); } return output; }).finally(() => this.inflight.delete(key));
+    const p = Promise.resolve().then(() => { const s = this.requireSession(id), q = this.current(s, questionId); const accepted = skipQuestion(q); if (accepted) { s.uiState = null; s.feedbackIndex = q.index; s.currentIndex++; } const output = { accepted, session: clone(s), item: clone(q) }; if (accepted) { this.memory.requests ||= {}; this.memory.requests[key] = { fingerprint: JSON.stringify([questionId, 'skip']), result: clone(output) }; this.persist(); } return output; }).finally(() => this.inflight.delete(key));
     this.inflight.set(key, p); return p;
   }
   async finishSession(id, reason = 'complete', requestId = crypto.randomUUID()) {

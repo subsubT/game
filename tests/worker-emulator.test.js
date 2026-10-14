@@ -23,6 +23,30 @@ const answerOf = q => {
   return 10 - q.operands[q.typeId === 'make_ten' ? 0 : 1];
 };
 
+test('real Firestore free saves are atomic, resumable across devices, isolated and distinct from final history',{timeout:180000},async()=>{
+  const teacher='progress-teacher',student='progress-student';await call(teacher,'createTeacherSpace',{requestId:id()});
+  const cls=await call(teacher,'createClass',{privateLabel:'自由저장실검사',requestId:id()});
+  await call(student,'requestJoin',{code:cls.code,privateName:'가상학생',pin:'4826',pinConfirm:'4826',requestId:id()});
+  const sid=(await call(teacher,'listClassStudents',{classId:cls.classId})).students[0].studentId;
+  assert.equal((await call(student,'getStudentGames')).games[0].activeSession,null);
+  let s=await call(student,'startSession',{gameId:'1math3',mode:'regular',requestId:id()});
+  const uiState={view:'playing',questionId:s.questions[0].id,draft:'1',selected:[]},args={sessionId:s.sessionId,expectedRevision:s.revision,uiState,requestId:id()};
+  const saved=await Promise.all([call(student,'saveSession',args),call(student,'saveSession',args)]);assert.deepEqual(saved[0],saved[1]);s=saved[0].session;
+  assert.equal(s.revision,1);assert.equal(s.progressState,'paused');assert.equal(s.expiresAt,null);
+  await assert.rejects(call(student,'submitAnswer',{sessionId:s.sessionId,questionId:s.questions[0].id,skip:true,requestId:id()}),/SESSION_PAUSED/);
+  const roster=await call('progress-new-device','getClassLoginRoster',{code:cls.code});
+  await call('progress-new-device','loginStudentPin',{grant:roster.grant,studentId:sid,pin:'4826',requestId:id()});
+  const hub=await call('progress-new-device','getStudentGames');assert.deepEqual(hub.games[0].activeSession.uiState,uiState);
+  await assert.rejects(call(student,'saveSession',{...args,requestId:id()}));
+  s=await call('progress-new-device','resumeSession',{sessionId:s.sessionId,expectedRevision:s.revision,requestId:id()});
+  s=(await call('progress-new-device','submitAnswer',{sessionId:s.sessionId,questionId:s.questions[0].id,skip:true,expectedRevision:s.revision,requestId:id()})).session;
+  assert.equal(s.currentIndex,1);
+  s=(await call('progress-new-device','saveSession',{sessionId:s.sessionId,expectedRevision:s.revision,uiState:{view:'feedback',questionId:s.questions[0].id,draft:'',selected:[]},requestId:id()})).session;
+  const records=await call(teacher,'listClassSessions',{classId:cls.classId,gameId:'1math3'});assert.equal(records.sessions[0].status,'playing');assert.equal(records.sessions[0].progressState,'paused');
+  assert.equal((await call(teacher,'getSessionDetails',{classId:cls.classId,sessionId:s.sessionId})).answers.length,1);
+  await assert.rejects(call('outsider','getStudentGames'));
+});
+
 test('real Firestore PIN transactions preserve legacy data, revoke races, protect credentials and recover after reset', {timeout:180000},async()=>{
   const teacher='pin-teacher',student='pin-old',otherTeacher='pin-other-teacher';
   await call(teacher,'createTeacherSpace',{requestId:id()});await call(otherTeacher,'createTeacherSpace',{requestId:id()});

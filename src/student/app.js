@@ -1,13 +1,15 @@
 import { GAME, questionExplanation, summarize } from '../games/1math3/core.js';
 import { MockGameService } from '../services/mock-game-service.js';
 import { FirebaseGameService } from '../services/firebase-game-service.js';
+import { GAME_CATALOG } from '../games/catalog.js';
+import { defaultProgressUI, checkedProgressUI } from '../games/session-progress.js';
 
 const live = Boolean(globalThis.MATH3_FIREBASE_CONFIG?.apiKey && globalThis.MATH3_FIREBASE_CONFIG?.projectId);
 const service = live ? new FirebaseGameService() : new MockGameService();
 const root = document.querySelector('#app');
 const ui = { view: 'home', tab: 'global', draft: '', selected: [], busy: false, sound: false, error: '', board: null };
 let session = service.memory.session;
-if (session?.status === 'playing') {
+if (!live && session?.status === 'playing') {
   const pending = session.questions[session.feedbackIndex];
   if (pending?.status === 'answered') ui.view = 'feedback';
   else if (pending?.step === 'sum' && pending.firstResponse?.pair) ui.view = 'pairFeedback';
@@ -23,6 +25,7 @@ const active = () => session?.questions[session.currentIndex];
 const summary = () => session?.result || summarize(session);
 
 function render() {
+  keepLocalInput();
   if (ui.view === 'home') root.innerHTML = homeView();
   else if (ui.view === 'join') root.innerHTML = joinView();
   else if (ui.view === 'intro') root.innerHTML = introView();
@@ -33,6 +36,10 @@ function render() {
   else if (ui.view === 'skipConfirm' || ui.view === 'quitConfirm') root.innerHTML = confirmView();
   else if (ui.view === 'result') root.innerHTML = resultView();
   else if (ui.view === 'review') root.innerHTML = reviewView();
+  else if (ui.view === 'saved') root.innerHTML = savedView();
+  else if (ui.view === 'saveError') root.innerHTML = saveErrorView();
+  else if (ui.view === 'ranks') root.innerHTML = portalRanksView();
+  if (session?.status === 'playing' && ['playing','feedback','pairFeedback','pause'].includes(ui.view) && !root.querySelector('[data-action="save-now"]')) root.insertAdjacentHTML('beforeend', `<section class="panel save-controls"><p class="micro muted">확정한 답은 자동 저장해요. 쉬거나 나가기 전에 저장을 눌러 주세요.</p>${btn('저장하고 쉬기','save-now','button secondary')} ${btn('게임 선택으로','save-home','button light')}</section>`);
   document.querySelector('.topbar').inert = ui.view === 'skipConfirm' || ui.view === 'quitConfirm';
   document.querySelector('footer').inert = ui.view === 'skipConfirm' || ui.view === 'quitConfirm';
   requestAnimationFrame(() => {
@@ -44,19 +51,58 @@ function render() {
 }
 
 function homeView() {
+  if (service.memory.approved) return gameHubView();
   const joined = service.memory.approved;
   const rankText = live ? '서버에서 확정된 기록만 보여 줍니다.' : '모두 예시 별명과 예시 점수예요. 실제 학생 기록이 아니에요.';
   const settingText = live ? '설정은 서버에 저장돼요.' : '지금 설정은 모의예요.';
   return `<section class="panel hero"><div class="hero-star" aria-hidden="true">🌟</div><div class="eyebrow">1학년 2학기 수학 · 2단원</div><h1>수학 별 모으기</h1>${joined && service.memory.privateName ? `<p class="micro">내 이름: ${esc(service.memory.privateName)}</p>` : ""}<p>덧셈과 뺄셈 문제를 풀고<br>별을 차곡차곡 모아 보아요.</p><div class="summary-grid"><div class="summary-item"><strong>50문항</strong>천천히 풀어요</div><div class="summary-item"><strong>5가지</strong>수학 놀이</div><div class="summary-item"><strong>쉬는 시간</strong>10문제마다 있어요</div></div><div class="actions">${btn('혼자 연습 시작하기', 'practice')} ${btn(joined ? '기록 도전 시작' : '학급 참여하기', joined ? 'record' : 'join', 'button secondary')}</div><p class="micro muted">시간 제한이 없어요. 연습 기록은 공식 순위에 올라가지 않아요.</p></section>
   <section class="panel"><div class="panel-title"><div><h2>친구들 순위</h2><p class="muted">${rankText}</p></div><span class="pill">전체 순위 기본 공개</span></div>${rankTabs()}<div id="rank-content">${rankContent()}</div><label class="toggle-label"><input type="checkbox" data-global-toggle ${service.memory.globalParticipation ? 'checked' : ''} ${live && !service.memory.approved ? 'disabled' : ''}><span>전체 순위에 내 최고 기록 등록 허용<br><span class="micro muted">현재 ${service.memory.globalParticipation ? '켜짐' : '꺼짐'} · 기본값은 켜짐. 꺼도 순위 조회는 할 수 있어요. ${settingText}</span></span></label><div class="notice micro">전체 순위에는 학급과 분리된 별명과 최고점만 보입니다.</div>${live ? `<div class="actions">${btn('학생 바꾸기', 'switch-student', 'button light')}</div>` : ''}</section>`;
 }
+function gameHubView() {
+  const games = live ? service.memory.games || [] : GAME_CATALOG.map(g => ({ ...g, activeSession: service.memory.session?.status === 'playing' ? service.memory.session : null }));
+  return `<section class="panel hero"><div class="hero-star" aria-hidden="true">🎮</div><h1>어떤 게임을 할까요?</h1><p class="micro">내 이름: ${esc(service.memory.privateName || service.memory.classAlias || '수학 친구')}</p><p>게임을 골라 보아요.<br>저장한 게임은 이어서 할 수 있어요.</p>${service.memory.gameLoadError ? `<p class="error" role="status">게임 목록을 확인하지 못했어요. 연결을 확인하고 다시 눌러 주세요.</p>${btn('게임 목록 다시 보기','hub-refresh','button secondary')}` : ''}<div class="game-catalog">${games.map(g => `<article class="game-tile"><div class="hero-star" aria-hidden="true">🌟</div><h2>${esc(g.title)}</h2><p>${esc(g.description)}</p>${g.activeSession ? `<p class="notice">${g.activeSession.currentIndex} / ${g.totalQuestions}문제 풀었어요.<br>${g.activeSession.progressState === 'paused' ? '저장한 게임이 있어요.' : '진행 중인 게임이 있어요.'}</p><button class="button" data-action="resume-game" data-game="${esc(g.gameId)}">이어서 하기</button>` : `<button class="button" data-action="select-game" data-game="${esc(g.gameId)}">게임 고르기</button>`}</article>`).join('')}</div><p class="error" role="status">${esc(ui.error)}</p><div class="actions">${btn('친구들 순위','hub-ranks','button secondary')} ${btn('로그아웃 · 학생 바꾸기','switch-student','button light')}</div></section>`;
+}
+async function loadGames(discardConflicts = false) {
+  if (!live || !service.memory.approved) return;
+  try { await service.getGames(discardConflicts); ui.error = ''; }
+  catch { service.memory.gameLoadError = true; ui.error = '저장한 내용을 확인하지 못했어요. 연결을 확인하고 다시 눌러 주세요.'; }
+  if (ui.view === 'home') render();
+}
+function progressUI() {
+  const view = ['feedback','pairFeedback'].includes(ui.view) ? ui.view : 'playing';
+  const q = view === 'feedback' ? session.questions[session.feedbackIndex] : active();
+  const pair = q?.typeId === 'make_ten_then_add' && q.step === 'pair';
+  return { view, questionId: q?.id || null, draft: view === 'playing' && !pair ? ui.draft : '', selected: view === 'playing' && pair ? ui.selected : [] };
+}
+function keepLocalInput() {
+  if (!session || session.status !== 'playing' || !['playing','feedback','pairFeedback'].includes(ui.view)) return;
+  try { localStorage.setItem(`1math3.input.${session.sessionId}`, JSON.stringify({ revision: session.revision ?? 0, state: checkedProgressUI(session, progressUI()) })); } catch {}
+}
+function restoreGame(s) {
+  session = s;
+  if (s.status !== 'playing') { ui.view = 'result'; return; }
+  let state = s.uiState || defaultProgressUI(s);
+  try { const local = JSON.parse(localStorage.getItem(`1math3.input.${s.sessionId}`) || 'null'); if (local?.revision === (s.revision ?? 0)) state = checkedProgressUI(s, local.state); } catch {}
+  ui.view = state.view; ui.draft = state.draft; ui.selected = state.selected; ui.error = '';
+}
+function savedView() { return `<section class="panel hero"><div class="hero-star">💾</div><h1>저장했어요!</h1><p>${session.currentIndex}문제까지 풀었어요.<br>${live && session.mode === 'regular' ? '다른 기기에서도 이어서 할 수 있어요.' : '연습은 이 기기에서만 이어서 할 수 있어요.'}</p><p class="notice">아직 끝난 게임은 아니에요. 점수와 순위는 끝까지 풀면 확정돼요.</p><div class="actions">${btn('이어서 하기','resume-saved')} ${btn('게임 선택으로','hub')} ${btn('저장하고 로그아웃','saved-logout','button light')}</div></section>`; }
+function saveErrorView() { return `<section class="panel"><h1>저장을 확인하지 못했어요</h1><p>입력한 내용은 이 기기에 보관했어요.<br>인터넷 연결을 확인하고 다시 눌러 주세요.<br>다른 기기에서는 서버가 확인한 기록까지만 보여요.</p><p class="error" role="status">${esc(ui.error)}</p><div class="actions">${btn('저장 다시 시도','save-retry')} ${btn('서버에 저장된 기록 불러오기','load-confirmed','button secondary')}</div></section>`; }
+async function saveGame(destination = 'saved') {
+  ui.saveDestination = destination; ui.busy = true;
+  const state = ui.saveAttempt || progressUI(); ui.saveAttempt = state;
+  keepLocalInput();
+  try { session = await service.saveSession(session.sessionId, state); ui.saveAttempt = null; ui.error = ''; ui.view = destination; if (destination === 'home') await loadGames(); }
+  catch (error) { ui.view = 'saveError'; ui.error = ['REVISION_CONFLICT','INVALID_PROGRESS','SESSION_PAUSED'].includes(error.message) ? '다른 화면에서 게임이 바뀌었어요. 서버에 저장된 기록을 불러와 주세요.' : '저장 완료 응답이 없어요. 다시 시도하면 같은 요청을 확인해요.'; }
+  finally { ui.busy = false; render(); }
+}
 function rankTabs() { return `<div class="tabs" role="tablist" aria-label="순위 범위"><button class="tab" type="button" role="tab" aria-selected="${ui.tab === 'class'}" data-action="tab-class">우리 반 순위</button><button class="tab" type="button" role="tab" aria-selected="${ui.tab === 'global'}" data-action="tab-global">전체 순위</button></div>`; }
+function portalRanksView() { return `<section class="panel"><h1>친구들 순위</h1><p>끝까지 푼 게임의 최고점을 보여 줘요.</p>${rankTabs()}${rankContent()}<label class="toggle-label"><input type="checkbox" data-global-toggle ${service.memory.globalParticipation ? 'checked' : ''}><span>전체 순위에 내 최고 기록 등록 허용</span></label><div class="actions">${btn('게임 선택으로','hub','button light')}</div></section>`; }
 function rankContent() {
   if (!ui.board) return `<p class="muted">${esc(ui.boardError || '순위를 불러오는 중…')}</p>`;
   const season = ui.board.boardKey.split(':')[3] || currentSeason();
   return `<p class="pill">1math3 · ${season} · ${live ? '확정 기록' : '예시 데이터'}</p><div>${ui.board.entries.length ? ui.board.entries.map(r => `<div class="rank-row ${r.isMe ? 'me' : ''}"><strong>${r.rank}위</strong><span>${esc(r.displayAlias)}${r.isMe ? ' (나)' : ''}</span><span>${r.score}점</span></div>`).join('') : '<p class="muted">아직 순위 기록이 없어요.</p>'}</div>`;
 }
-async function loadBoard() { try { ui.board = await service.getLeaderboard(ui.tab, ui.view === 'result' && session?.seasonId ? session.seasonId : currentSeason()); ui.boardError = ''; } catch { ui.board = null; ui.boardError = ui.tab === 'class' && !service.memory.approved ? '우리 반 순위는 학급 참여 후 볼 수 있어요.' : '순위를 불러오지 못했어요. 다시 눌러 주세요.'; } if (ui.view === 'home' || ui.view === 'result') render(); }
+async function loadBoard() { try { ui.board = await service.getLeaderboard(ui.tab, ui.view === 'result' && session?.seasonId ? session.seasonId : currentSeason()); ui.boardError = ''; } catch { ui.board = null; ui.boardError = ui.tab === 'class' && !service.memory.approved ? '우리 반 순위는 학급 참여 후 볼 수 있어요.' : '순위를 불러오지 못했어요. 다시 눌러 주세요.'; } if (ui.view === 'home' || ui.view === 'result' || ui.view === 'ranks') render(); }
 
 function joinView() {
   if (live) return pinLoginView();
@@ -87,7 +133,7 @@ function loginError(error) {
 }
 async function loginWork(work) {
   ui.busy = true;
-  try { await work(); ui.error = ''; if (service.memory.approved) { session = null; ui.loginRoster = null; ui.loginCode = ''; ui.loginStudent = ''; ui.loginStep = 'code'; ui.view = 'home'; ui.board = null; } }
+  try { await work(); ui.error = ''; if (service.memory.approved) { session = null; ui.loginRoster = null; ui.loginCode = ''; ui.loginStudent = ''; ui.loginStep = 'code'; ui.view = 'home'; ui.board = null; await loadGames(); } }
   catch (error) { ui.error = loginError(error); }
   finally { ui.busy = false; render(); if (service.memory.approved) loadBoard(); }
 }
@@ -96,7 +142,7 @@ function introView() {
   const publicNotice = regular
     ? '<strong>전체 순위 등록 기본값은 켜짐이에요.</strong><br>등록을 켜면 정규 회차를 끝냈을 때 학급과 분리된 별명으로 전체 순위에 들어갈 수 있어요. 순위 조회는 등록을 꺼도 가능해요.'
     : '<strong>혼자 연습한 결과는 순위에 포함되지 않아요.</strong><br>전체 순위 등록 설정은 다음 기록 도전을 위한 선택이에요.';
-  return `<section class="panel"><div class="eyebrow">${regular ? `우리 반 · ${esc(service.memory.classAlias)}` : '혼자 연습'}</div><h1>${regular ? '기록 도전 준비!' : '연습 준비!'}</h1><p>5가지 문제를 10문제씩, 모두 50문제 풀어요.<br>정답은 별 1개와 10점이에요. 틀려도 괜찮아요!</p><div class="notice warn">${publicNotice}${live ? '' : '<br>지금은 모의 설정이라 실제 순위에는 저장되지 않아요.'}</div><label class="toggle-label" style="margin-top:18px"><input type="checkbox" id="global-setting" ${service.memory.globalParticipation ? 'checked' : ''} ${live && !regular ? 'disabled' : ''}><span>전체 순위에 내 최고 기록 등록 허용<br><span class="micro muted">현재 ${service.memory.globalParticipation ? '켜짐' : '꺼짐'} · 처음 기본값은 켜짐, 언제든 바꿀 수 있어요</span></span></label><p class="micro muted">10문제마다 쉬어갈 수 있어요. 시간 제한은 없어요. 먼저 확정한 답이 점수에 반영돼요.</p><p class="error" role="status">${esc(ui.error)}</p><div class="actions">${btn('시작하기', 'start-now')} ${btn('그만두기', 'home', 'button light')}</div></section>`;
+  return `<section class="panel"><div class="eyebrow">${regular ? `우리 반 · ${esc(service.memory.classAlias)}` : '혼자 연습'}</div><h1>${regular ? '기록 도전 준비!' : '연습 준비!'}</h1><p>5가지 문제를 10문제씩, 모두 50문제 풀어요.<br>정답은 별 1개와 10점이에요. 틀려도 괜찮아요!</p><div class="notice warn">${publicNotice}${live ? '' : '<br>지금은 모의 설정이라 실제 순위에는 저장되지 않아요.'}</div><label class="toggle-label" style="margin-top:18px"><input type="checkbox" id="global-setting" ${service.memory.globalParticipation ? 'checked' : ''} ${live && !regular ? 'disabled' : ''}><span>전체 순위에 내 최고 기록 등록 허용<br><span class="micro muted">현재 ${service.memory.globalParticipation ? '켜짐' : '꺼짐'} · 처음 기본값은 켜짐, 언제든 바꿀 수 있어요</span></span></label><p class="micro muted">언제든 저장하고 쉬어갈 수 있어요. 시간 제한은 없어요. 먼저 확정한 답이 점수에 반영돼요.</p><p class="error" role="status">${esc(ui.error)}</p><div class="actions">${btn('시작하기', 'start-now')} ${btn('그만두기', 'home', 'button light')}</div></section>`;
 }
 function problemText(q) {
   if (q.prompt) return q.prompt;
@@ -128,7 +174,7 @@ function gameView() {
   return `<section class="panel"><div class="progress-wrap"><div><div class="question-head"><span class="pill">${q.round}라운드 · ${titleType(q.typeId)}</span><span class="star-count" aria-label="별 ${summary().stars}개">⭐ ${summary().stars} / 50</span></div><div class="progress" role="progressbar" aria-label="전체 진행" aria-valuemin="0" aria-valuemax="50" aria-valuenow="${count}"><span style="width:${count * 2}%"></span></div></div><strong>${count} / 50</strong></div>
   <h1 class="problem" id="problem">${esc(problemText(q))}</h1>${visual(q)}
   ${pair ? `<p class="story">10이 되는 두 카드를 골라 보세요.</p><div class="card-row" role="group" aria-label="카드 두 장 선택하기">${q.operands.map((n, i) => `<button type="button" class="card-choice" data-action="card" data-index="${i}" aria-pressed="${ui.selected.includes(i)}" aria-label="${i + 1}번 카드 ${n}">${n}<span class="sr-only">번</span></button>`).join('')}</div><p class="micro muted" style="text-align:center">같은 숫자 카드도 카드 위치를 보고 선택해요. 선택 ${ui.selected.length}/2</p>${btn('고른 카드 확인', 'submit-pair')}<p class="error" role="status">${esc(ui.error)}</p>` : `<div class="${q.typeId === 'make_ten_then_add' ? 'story' : 'sr-only'}">${q.typeId === 'make_ten_then_add' ? '이제 세 수의 합을 입력해요.' : ''}</div><div class="answer-row"><span class="operator" aria-hidden="true">내 답</span><div id="answer-display" class="number-display" role="status" aria-label="입력한 답">${esc(ui.draft || '□')}</div><span class="operator" aria-hidden="true">개</span></div><div class="keypad" role="group" aria-label="숫자 키패드">${['1','2','3','4','5','6','7','8','9','지우기','0','확인'].map(v => `<button type="button" class="key" data-action="${v === '지우기' ? 'clear' : v === '확인' ? 'submit-number' : 'digit'}" ${v === '지우기' || v === '확인' ? '' : `data-value="${v}"`}>${v}</button>`).join('')}</div><p class="error" role="status">${esc(ui.error)}</p>`}
-  <div class="actions">${btn('문제 건너뛰기', 'skip', 'button light')} ${btn('게임 그만하기', 'quit', 'button danger')}</div></section>`;
+  <div class="actions">${btn('문제 건너뛰기', 'skip', 'button light')} ${btn('이번 게임 끝내기', 'quit', 'button danger')}</div></section>`;
 }
 function feedbackView() {
   const q = session.questions[session.feedbackIndex ?? session.currentIndex - 1]; const correct = q?.firstCorrect;
@@ -142,11 +188,11 @@ function pairFeedbackView() {
 }
 function pauseView() {
   const s = summary(), n = session.currentIndex;
-  return `<section class="panel pause"><div class="hero-star">🌈</div><div class="eyebrow">잠깐 쉬어가도 좋아요</div><h1>${n}문제를 풀었어요!</h1><p class="pause-count">⭐ ${s.stars}개 모았어요</p><p>물도 마시고 손을 쭉 펴 보세요.<br>쉬지 않고 계속해도 괜찮아요.</p><div class="actions">${btn('계속 풀기', 'continue-game')} ${btn('여기서 그만하기', 'quit', 'button light')}</div></section>`;
+  return `<section class="panel pause"><div class="hero-star">🌈</div><div class="eyebrow">잠깐 쉬어가도 좋아요</div><h1>${n}문제를 풀었어요!</h1><p class="pause-count">⭐ ${s.stars}개 모았어요</p><p>물도 마시고 손을 쭉 펴 보세요.<br>쉬지 않고 계속해도 괜찮아요.</p><div class="actions">${btn('계속 풀기', 'continue-game')} ${btn('이번 게임 끝내기', 'quit', 'button light')}</div></section>`;
 }
 function confirmView() {
   const skip = ui.view === 'skipConfirm';
-  return `<div class="modal-overlay"><section class="panel" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-description"><div class="eyebrow">확인해 주세요</div><h1 id="confirm-title">${skip ? '이 문제를 건너뛸까요?' : '게임을 그만할까요?'}</h1><p id="confirm-description">${skip ? '이 문제는 0점으로 기록되고 정답 풀이를 볼 수 있어요.' : '지금까지 답한 내용만 저장하고 미완료 회차로 남아요. 순위에는 들어가지 않아요.'}</p><p class="error" role="status">${esc(ui.error)}</p><div class="actions"><button type="button" class="button" data-action="${skip ? 'confirm-skip' : 'confirm-quit'}" autofocus>${skip ? '건너뛰기 확정' : '여기까지 기록하기'}</button>${btn('계속 풀기', 'cancel-confirm', 'button light')}</div></section></div>`;
+  return `<div class="modal-overlay"><section class="panel" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-description"><div class="eyebrow">확인해 주세요</div><h1 id="confirm-title">${skip ? '이 문제를 건너뛸까요?' : '게임을 그만할까요?'}</h1><p id="confirm-description">${skip ? '이 문제는 0점으로 기록되고 정답 풀이를 볼 수 있어요.' : '이 게임은 종료되어 이어서 할 수 없어요. 순위에는 들어가지 않아요. 나중에 이어서 하려면 계속 풀기를 누른 뒤 저장하고 쉬기를 골라 주세요.'}</p><p class="error" role="status">${esc(ui.error)}</p><div class="actions"><button type="button" class="button" data-action="${skip ? 'confirm-skip' : 'confirm-quit'}" autofocus>${skip ? '건너뛰기 확정' : '여기까지 기록하기'}</button>${btn('계속 풀기', 'cancel-confirm', 'button light')}</div></section></div>`;
 }
 function resultView() {
   const s = summary(), complete = session.status === 'complete';
@@ -161,6 +207,26 @@ function reviewView() {
 root.addEventListener('click', async e => {
   const b = e.target.closest('[data-action]'); if (!b || ui.busy) return;
   const action = b.dataset.action;
+  if (action === 'hub-ranks') { ui.view = 'ranks'; ui.board = null; render(); await loadBoard(); return; }
+  if (['select-game','resume-game','hub','hub-refresh','save-now','save-home','save-retry','resume-saved','saved-logout','load-confirmed'].includes(action)) {
+    if (action === 'save-now' || action === 'save-home' || action === 'save-retry') { await saveGame(action === 'save-home' ? 'home' : action === 'save-retry' ? ui.saveDestination : 'saved'); return; }
+    ui.busy = true;
+    try {
+      if (action === 'hub' || action === 'hub-refresh' || action === 'load-confirmed') { ui.view = 'home'; ui.saveAttempt = null; await loadGames(action === 'load-confirmed'); }
+      else if (action === 'saved-logout') { await service.switchStudent(); session = null; ui.view = 'home'; ui.loginStep = 'code'; }
+      else if (action === 'resume-saved') restoreGame(await service.resumeSession(session.sessionId));
+      else {
+        const game = GAME_CATALOG.find(g => g.gameId === b.dataset.game); if (!game) throw Error('UNKNOWN_GAME');
+        if (game.gameId !== GAME.gameId) { location.assign(game.entryPath); return; }
+        ui.mode = 'regular';
+        if (action === 'select-game') ui.view = 'intro';
+        else { const entry = service.memory.games?.find(g => g.gameId === game.gameId); session = entry?.activeSession || service.memory.session; restoreGame(await service.resumeSession(session.sessionId)); }
+      }
+      ui.error = '';
+    } catch { ui.error = '저장한 게임을 확인하지 못했어요. 연결을 확인하고 다시 눌러 주세요.'; }
+    finally { ui.busy = false; render(); }
+    return;
+  }
   if (['login-roster','choose-student','new-student','login-code-back','login-list-back','pin-register','pin-login','pin-migrate'].includes(action)) {
     if (action === 'login-roster') { const code = root.querySelector('#join-code').value; await loginWork(async () => { ui.loginRoster = await service.getLoginRoster(code); ui.loginCode = code; ui.loginStep = 'list'; }); }
     else if (action === 'choose-student') { ui.loginStudent = b.dataset.id; ui.loginStep = 'pin'; ui.error = ''; render(); }
@@ -176,7 +242,7 @@ root.addEventListener('click', async e => {
   else if (action === 'clear') { ui.refocus = '[data-action="clear"]'; ui.draft = ''; ui.error = ''; render(); }
   else if (action === 'card') { const i = Number(b.dataset.index); ui.refocus = `[data-action="card"][data-index="${i}"]`; ui.selected = ui.selected.includes(i) ? ui.selected.filter(x => x !== i) : ui.selected.length < 2 ? [...ui.selected, i] : ui.selected; render(); }
   else if (action === 'tab-class' || action === 'tab-global') { ui.refocus = `[data-action="${action}"]`; ui.tab = action.endsWith('class') ? 'class' : 'global'; ui.board = null; await loadBoard(); }
-  else if (action === 'home') { ui.view = 'home'; ui.error = ''; render(); loadBoard(); }
+  else if (action === 'home') { ui.view = 'home'; ui.error = ''; render(); await loadGames(); loadBoard(); }
   else if (action === 'join') { ui.view = 'join'; ui.error = ''; render(); }
   else if (action === 'join-submit') {
     const code = root.querySelector('#join-code').value, nickname = root.querySelector('#nickname').value.trim();
@@ -189,7 +255,7 @@ root.addEventListener('click', async e => {
   else if (action === 'switch-student') { ui.busy = true; try { await service.switchStudent(); session = null; ui.view = 'home'; ui.board = null; ui.error = ''; ui.loginStep = 'code'; ui.loginRoster = null; ui.loginCode = ''; ui.loginStudent = '';  } catch { ui.error = '학생 바꾸기를 완료하지 못했어요. 네트워크를 확인해 주세요.'; } finally { ui.busy = false; render(); loadBoard(); } }
   else if (action === 'practice' || action === 'record') { ui.busy = true; try { if (live && action === 'record') { await service.refreshStatus(); if (!service.memory.approved) { ui.view = 'join'; ui.error = '학급 소속을 확인해 주세요. 선생님께 문의해 주세요.'; render(); return; } } ui.mode = action === 'record' ? 'regular' : 'practice'; ui.view = 'intro'; } catch { ui.error = '학급 연결을 확인하지 못했어요. 다시 시도해 주세요.'; } finally { ui.busy = false; render(); } }
   else if (action === 'start-now') {
-    ui.busy = true; try { if (ui.mode === 'regular') await service.setGlobalParticipation(root.querySelector('#global-setting').checked); session = await service.startSession(GAME.gameId, { mode: ui.mode }); ui.draft = ''; ui.view = session.status === 'playing' ? 'playing' : 'result'; ui.error = ''; } catch { ui.error = '시작 상태를 확인하지 못했어요. 다시 시도해 주세요.'; } finally { ui.busy = false; render(); }
+    ui.busy = true; try { if (ui.mode === 'regular') await service.setGlobalParticipation(root.querySelector('#global-setting').checked); session = await service.startSession(GAME.gameId, { mode: ui.mode }); if (session.progressState === 'paused') session = await service.resumeSession(session.sessionId); restoreGame(session); ui.error = ''; } catch { ui.error = '시작 상태를 확인하지 못했어요. 다시 시도해 주세요.'; } finally { ui.busy = false; render(); }
   }
   else if (action === 'submit-number') await submit(ui.draft);
   else if (action === 'submit-pair') {
@@ -229,6 +295,7 @@ async function submit(value) {
 }
 
 document.addEventListener('keydown', e => {
+  if (ui.busy) return;
   if ((ui.view === 'skipConfirm' || ui.view === 'quitConfirm') && e.key === 'Escape') { e.preventDefault(); ui.view = 'playing'; render(); return; }
   if ((ui.view === 'skipConfirm' || ui.view === 'quitConfirm') && e.key === 'Tab') {
     const buttons = [...root.querySelectorAll('[role="alertdialog"] button:not([disabled])')], first = buttons[0], last = buttons.at(-1);
@@ -247,5 +314,5 @@ document.addEventListener('keydown', e => {
 document.querySelector('#sound-toggle').addEventListener('click', e => { ui.sound = !ui.sound; e.currentTarget.setAttribute('aria-pressed', String(ui.sound)); e.currentTarget.textContent = ui.sound ? '🔔 소리 켬' : '🔕 소리 끔'; });
 function playTone() { if (!ui.sound) return; try { const context = new AudioContext(), oscillator = context.createOscillator(), gain = context.createGain(); oscillator.frequency.value = 660; gain.gain.value = .035; oscillator.connect(gain); gain.connect(context.destination); oscillator.start(); oscillator.stop(context.currentTime + .1); oscillator.onended = () => context.close(); } catch {} }
 render();
-if (live) service.ready.then(() => { session = service.memory.session; if (service.memory.pinRequired) ui.view = 'join'; else if (session?.status === 'playing') { const pending = session.questions[session.feedbackIndex]; ui.view = pending?.status === 'answered' ? 'feedback' : session.questions[session.currentIndex]?.step === 'sum' ? 'pairFeedback' : 'playing'; } else if (session?.status === 'complete' || session?.status === 'incomplete') ui.view = 'result'; render(); loadBoard(); }).catch(() => { ui.boardError = 'Firebase 연결을 확인하지 못했어요. 설정과 네트워크를 확인해 주세요.'; render(); });
+if (live) service.ready.then(() => { session = service.memory.session; if (service.memory.pinRequired) ui.view = 'join'; else if (service.memory.approved) ui.view = 'home'; render(); loadBoard(); }).catch(() => { ui.boardError = 'Firebase 연결을 확인하지 못했어요. 설정과 네트워크를 확인해 주세요.'; render(); });
 else loadBoard();

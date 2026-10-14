@@ -1,6 +1,6 @@
 # 2026-10-14 개발 체크포인트
 
-**Checkpoint A PASS — 학생 PIN 로그인 구현·개발 검증 완료.** `codex/student-pin-checkpoint-a`에 보관하며 공개 서비스에는 아직 반영하지 않았다. [Checkpoint A 설계·검증·다음 작업](docs/CHECKPOINT_A_STUDENT_PIN.md)을 기준으로 이어간다. 게임 선택/자유 저장은 B, 전체 실제 검증과 main/공개 배포는 C에서 진행한다.
+**Checkpoint B PASS — 게임 선택·자유 저장·다른 기기 이어하기 구현 및 개발 검증 완료.** A의 PIN 로그인을 이어받은 `codex/game-save-checkpoint-b`에 보관하며 공개 서비스에는 아직 반영하지 않았다. 사용자 결정대로 1math3는 시간 제한 없음이다. [Checkpoint B 설계·검증·C 인계](docs/CHECKPOINT_B_GAME_PROGRESS.md)를 기준으로 이어간다. 전체 실제 검증과 main/공개 배포는 C에서 진행한다. [Checkpoint A](docs/CHECKPOINT_A_STUDENT_PIN.md)의 인증/학생 관리는 유지한다.
 
 # 수학 별 모으기 · 1math3
 

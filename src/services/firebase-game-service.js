@@ -1,5 +1,6 @@
 import { GAME } from '../games/1math3/core.js';
 import { GameService, MockGameService } from './mock-game-service.js';
+import { defaultProgressUI } from '../games/session-progress.js';
 
 const SESSION_KEY = '1math3.firebase.session';
 const REQUEST_KEY = '1math3.firebase.requests';
@@ -28,9 +29,8 @@ export class FirebaseGameService extends GameService {
     if (!this.auth.currentUser) await authSdk.signInAnonymously(this.auth);
     const status = await this.invoke('getStudentStatus', {});
     this.updateStatus(status);
-    const id = this.storage?.getItem(SESSION_KEY);
-    if (id && !this.memory.approved) this.storage?.removeItem(SESSION_KEY);
-    else if (id) { try { this.memory.session = await this.invoke('getSession', { sessionId: id }); } catch { /* keep the pointer so a later refresh can recover after a network failure */ } }
+    if (!this.memory.approved) this.storage?.removeItem(SESSION_KEY);
+    else { try { await this.recoverPending(); await this.refreshGamesInternal(); } catch { this.memory.gameLoadError = true; this.memory.session = null; } }
     return this;
   }
   updateStatus(status) {
@@ -56,6 +56,29 @@ export class FirebaseGameService extends GameService {
     catch (error) { throw new Error(error?.message || 'NETWORK_UNAVAILABLE'); }
   }
   async call(name, data) { await this.ready; return this.invoke(name, data); }
+  async recoverPending(sessionId = null, discardConflicts = false) {
+    for (const [key, entry] of Object.entries(this.pending)) {
+      const name = key.startsWith('answer:') || key.startsWith('skip:') ? 'submitAnswer' : key.startsWith('save:') ? 'saveSession' : key.startsWith('resume:') ? 'resumeSession' : null;
+      if (!name) continue;
+      const data = JSON.parse(entry.body); if (sessionId && data.sessionId !== sessionId) continue;
+      let result;
+      try { result = await this.invoke(name, { ...data, requestId: entry.requestId }); }
+      catch (error) {
+        if (!discardConflicts || !['REVISION_CONFLICT','INVALID_PROGRESS','SESSION_PAUSED','SESSION_NOT_ACTIVE'].includes(error.message)) throw error;
+        delete this.pending[key]; this.storage?.setItem(REQUEST_KEY, JSON.stringify(this.pending)); continue;
+      }
+      if (result.session) this.remember(result.session); else if (name === 'resumeSession') this.remember(result);
+      delete this.pending[key]; this.storage?.setItem(REQUEST_KEY, JSON.stringify(this.pending));
+    }
+  }
+  async refreshGamesInternal() {
+    const result = await this.invoke('getStudentGames', {}); this.memory.games = result.games; this.memory.gameLoadError = false;
+    const active = result.games.find(g => g.gameId === GAME.gameId)?.activeSession;
+    this.memory.regularSession = active || null;
+    if (active) this.remember(active);
+    return result;
+  }
+  async getGames(discardConflicts = false) { await this.ready; await this.recoverPending(null, discardConflicts); return this.refreshGamesInternal(); }
   async mutation(name, data, key) {
     await this.ready;
     const body = JSON.stringify(data), old = this.pending[key];
@@ -78,10 +101,12 @@ export class FirebaseGameService extends GameService {
     this.updateStatus(result); return result;
   }
   async getLoginRoster(code) { return this.call('getClassLoginRoster', { code }); }
+  clearLocalInputs() { for (const key of Object.keys(this.storage || {})) if (key.startsWith('1math3.input.')) this.storage.removeItem(key); }
   async loginPin(grant, studentId, pin) {
     const result = await this.call('loginStudentPin', { grant, studentId, pin, requestId: crypto.randomUUID() });
     this.storage?.removeItem(SESSION_KEY); this.storage?.removeItem(REQUEST_KEY);
-    this.pending = {}; this.memory.session = null;
+    this.clearLocalInputs();
+    this.pending = {}; this.memory.session = null; this.memory.games = []; this.memory.regularSession = null;
     this.pinSetupId = null;
     this.updateStatus(result); return result;
   }
@@ -104,6 +129,24 @@ export class FirebaseGameService extends GameService {
     const key = `start:${gameId}:${this.memory.session?.sessionId || 'first'}`;
     const result = await this.mutation('startSession', { gameId, mode }, key);
     return this.remember(result);
+  }
+  async saveSession(id, uiState) {
+    if (this.memory.session?.mode === 'practice') return this.remember(await this.practice.saveSession(id, uiState));
+    await this.ready;
+    const before = this.memory.session?.revision;
+    const hadSave = Boolean(this.pending[`save:${id}`]);
+    await this.recoverPending(id);
+    if (hadSave) return this.memory.session;
+    if (before !== this.memory.session?.revision) uiState = defaultProgressUI(this.memory.session);
+    const result = await this.mutation('saveSession', { sessionId: id, expectedRevision: this.memory.session.revision, uiState }, `save:${id}`);
+    return this.remember(result.session);
+  }
+  async resumeSession(id) {
+    if (this.memory.session?.mode === 'practice') return this.remember(await this.practice.resumeSession(id));
+    await this.ready; await this.recoverPending(id);
+    const fresh = await this.invoke('getSession', { sessionId: id }); this.remember(fresh);
+    if (fresh.status !== 'playing' || fresh.progressState !== 'paused') return fresh;
+    return this.remember(await this.mutation('resumeSession', { sessionId: id, expectedRevision: fresh.revision }, `resume:${id}`));
   }
   async getSession(id) {
     await this.ready;
@@ -142,6 +185,7 @@ export class FirebaseGameService extends GameService {
     await this.authSdk.signOut(this.auth);
     this.storage?.removeItem(SESSION_KEY); this.storage?.removeItem(REQUEST_KEY);
     this.storage?.removeItem('1math3.mock.v1');
+    this.clearLocalInputs();
     this.pending = {}; this.memory = { joined: false, approved: false, globalParticipation: true, session: null, classAlias: '' };
     this.pinSetupId = null;
     this.practice = new MockGameService(this.storage);

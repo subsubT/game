@@ -4,9 +4,11 @@ import { randomBytes, createHash, createHmac, createCipheriv, createDecipheriv, 
 import { GAME, buildSession, publicQuestion, evaluateStep, skipQuestion, summarize, questionExplanation } from '../../src/games/1math3/core.js';
 import { generateJoinCode } from '../../src/server/join-code.js';
 import { validPin, createPin, verifyPin } from '../../src/server/student-pin.js';
+import { GAME_CATALOG } from '../../src/games/catalog.js';
+import { defaultProgressUI, checkedProgressUI } from '../../src/games/session-progress.js';
 
 
-export const handlerNames = Object.freeze(["createTeacherSpace","recoverTeacherSpace","createClass","ensureClassJoinCode","listClasses","listPendingStudents","listClassSessions","getSessionDetails","setClassGlobalParticipation","approveStudent","listClassStudents","renameStudent","removeStudent","getTeacherLeaderboard","issueStudentReturnTicket","redeemStudentReturnTicket","detachStudentDevice","requestJoin","getStudentStatus","getClassLoginRoster","setStudentPin","loginStudentPin","changeStudentPin","startSession","getSession","submitAnswer","finishSession","setGlobalParticipation","getLeaderboard"]);
+export const handlerNames = Object.freeze(["createTeacherSpace","recoverTeacherSpace","createClass","ensureClassJoinCode","listClasses","listPendingStudents","listClassSessions","getSessionDetails","setClassGlobalParticipation","approveStudent","listClassStudents","renameStudent","removeStudent","getTeacherLeaderboard","issueStudentReturnTicket","redeemStudentReturnTicket","detachStudentDevice","requestJoin","getStudentStatus","getClassLoginRoster","setStudentPin","loginStudentPin","changeStudentPin","getStudentGames","saveSession","resumeSession","startSession","getSession","submitAnswer","finishSession","setGlobalParticipation","getLeaderboard"]);
 export function createHandlers(db, secret) {
   if (!secret) throw new Error('MATH3_SERVER_SECRET is required');
   const aliasWords = ['초록별', '노란달', '푸른별', '반짝꽃', '은하수', '새싹별', '달빛곰', '구름별'];
@@ -89,11 +91,12 @@ export function createHandlers(db, secret) {
   }
   function packSession(s) { const { questions, ...other } = s; return { ...other, questionsJson: JSON.stringify(questions) }; }
   function unpackSession(s) { return s.questions ? s : { ...s, questions: JSON.parse(s.questionsJson) }; }
+  const sessionExpired = s => Boolean(s.expiresAt && s.expiresAt <= now());
   function safeSession(s) {
     s = unpackSession(s);
     const questions = s.questions.map((q, i) => i < s.currentIndex || q.status === 'answered' ? safeQuestion(q, true) : i === s.currentIndex ? safeQuestion(q) : { index: i });
     const result = s.status === 'playing' ? null : { ...summarize(s), seasonId: s.seasonId, saveStatus: 'confirmed', rankStatus: s.status === 'complete' && s.mode === 'regular' ? 'ready' : 'excluded' };
-    return { sessionId: s.sessionId, gameId: s.gameId, versions: s.versions, seasonId: s.seasonId, mode: s.mode, status: s.status, currentIndex: s.currentIndex, revision: s.revision, feedbackIndex: s.feedbackIndex, startedAt: s.startedAt, expiresAt: s.expiresAt, questions, result };
+    return { sessionId: s.sessionId, gameId: s.gameId, versions: s.versions, seasonId: s.seasonId, mode: s.mode, status: s.status, currentIndex: s.currentIndex, revision: s.revision, feedbackIndex: s.feedbackIndex, startedAt: s.startedAt, expiresAt: s.expiresAt, progressState: s.progressState || 'running', savedAt: s.savedAt || null, uiState: s.uiState || null, timer: { policy: 'unlimited', remainingMs: null }, questions, result };
   }
   function opRef(uid, operation, id) { return db.doc(`operations/${digest(`${uid}:${operation}:${id}`)}`); }
   function checkOp(snap, fingerprint) { if (!snap.exists) return null; if (snap.data().fingerprint !== fingerprint) fail('REQUEST_CONFLICT'); return snap.data().resultJson ? JSON.parse(snap.data().resultJson) : snap.data().result; }
@@ -213,14 +216,14 @@ export function createHandlers(db, secret) {
     fields(data, ['classId', 'gameId']); if (data.gameId !== GAME.gameId) fail('INVALID_REQUEST');
     const { ref } = await ownedClass(uid, data.classId);
     const snap = await ref.collection('sessions').where('gameId', '==', GAME.gameId).limit(200).get();
-    return { sessions: snap.docs.map(d => { const s = unpackSession(d.data()), result = summarize(s); return { sessionId: d.id, studentId: s.studentId, seasonId: s.seasonId, startedAt: s.startedAt, completion: result.completion, score: result.score, correct: result.correct, wrong: result.wrong, skipped: result.skipped, unanswered: result.unanswered }; }) };
+    return { sessions: snap.docs.map(d => { const s = unpackSession(d.data()), result = summarize(s); return { sessionId: d.id, studentId: s.studentId, seasonId: s.seasonId, startedAt: s.startedAt, status: s.status, progressState: s.progressState || 'running', completion: result.completion, score: result.score, correct: result.correct, wrong: result.wrong, skipped: result.skipped, unanswered: result.unanswered }; }) };
   });
   const getSessionDetails = call(async (data, uid) => {
     fields(data, ['classId', 'sessionId']); const { ref } = await ownedClass(uid, data.classId);
     const snap = await ref.collection('sessions').doc(documentId(data.sessionId)).get();
     if (!snap.exists) fail('NOT_FOUND');
     const s = unpackSession(snap.data()), studentSnap = await ref.collection('students').doc(s.studentId).get();
-    return { result: summarize(s), seasonId: s.seasonId, student: { privateName: studentSnap.data()?.privateName || '', classAlias: studentSnap.data()?.classAlias || '' }, answers: s.questions.filter(q => q.status === 'answered').map(q => ({ index: q.index, typeId: q.typeId, subtype: q.subtype, operands: q.operands, answer: q.answer, firstResponse: q.firstResponse, firstCorrect: q.firstCorrect, skipped: Boolean(q.skipped) })) };
+    return { result: { ...summarize(s), status: s.status, progressState: s.progressState || 'running' }, seasonId: s.seasonId, student: { privateName: studentSnap.data()?.privateName || '', classAlias: studentSnap.data()?.classAlias || '' }, answers: s.questions.filter(q => q.status === 'answered').map(q => ({ index: q.index, typeId: q.typeId, subtype: q.subtype, operands: q.operands, answer: q.answer, firstResponse: q.firstResponse, firstCorrect: q.firstCorrect, skipped: Boolean(q.skipped) })) };
   });
   const setClassGlobalParticipation = call(async (data, uid) => {
     fields(data, ['classId', 'enabled']); if (typeof data.enabled !== 'boolean') fail('INVALID_REQUEST');
@@ -538,6 +541,52 @@ export function createHandlers(db, secret) {
     });
   });
 
+  const getStudentGames = call(async (data, uid) => {
+    fields(data, []); const binding = await student(uid);
+    const games = [];
+    for (const game of GAME_CATALOG) {
+      const pointer = await db.doc(`activeSessions/${digest(`${uid}:${game.gameId}`)}`).get();
+      const active = pointer.exists ? await readStudentSession(pointer.data().sessionId, uid, binding) : null;
+      games.push({ ...game, activeSession: active?.status === 'playing' ? active : null });
+    }
+    return { games };
+  });
+  const saveSession = call(async (data, uid) => {
+    fields(data, ['sessionId','expectedRevision','uiState','requestId']); requestId(data);
+    const binding = await student(uid), sid = documentId(data.sessionId), ref = db.doc(`classes/${binding.classId}/sessions/${sid}`);
+    if (!Number.isInteger(data.expectedRevision) || data.expectedRevision < 0) fail('INVALID_REQUEST');
+    const op = opRef(uid, 'saveSession', data.requestId), fingerprint = hash(JSON.stringify([sid, data.uiState]));
+    return db.runTransaction(async tx => {
+      const [snap, member, prior] = await Promise.all([tx.get(ref),tx.get(studentRef(binding)),tx.get(op)]);
+      await assertStudentTx(tx, member, binding, uid);
+      const previous = checkOp(prior, fingerprint); if (previous) return previous;
+      if (!snap.exists || snap.data().studentId !== binding.studentId || snap.data().status !== 'playing') fail('SESSION_NOT_ACTIVE');
+      const s = unpackSession(snap.data()); if (sessionExpired(s)) fail('SESSION_EXPIRED');
+      if (data.expectedRevision !== s.revision) fail('REVISION_CONFLICT');
+      let uiState; try { uiState = checkedProgressUI(s, data.uiState); } catch { fail('INVALID_PROGRESS'); }
+      if (s.storageVersion !== 2) tx.create(db.doc(`sessionProgressBackups/${randomId()}`), { classId: binding.classId, studentId: binding.studentId, sessionId: sid, before: snap.data(), changedBy: uid, createdAt: now() });
+      Object.assign(s, { progressState: 'paused', savedAt: now(), uiState, storageVersion: 2, expiresAt: null, revision: s.revision + 1 });
+      tx.update(ref, { progressState: s.progressState, savedAt: s.savedAt, uiState, storageVersion: 2, expiresAt: null, revision: s.revision });
+      const result = JSON.parse(JSON.stringify({ session: safeSession(s), saveStatus: 'confirmed', recordKind: 'progress' }));
+      tx.create(op, { fingerprint, resultJson: JSON.stringify(result) }); return result;
+    });
+  });
+  const resumeSession = call(async (data, uid) => {
+    fields(data, ['sessionId','expectedRevision','requestId']); requestId(data);
+    if (!Number.isInteger(data.expectedRevision) || data.expectedRevision < 0) fail('INVALID_REQUEST');
+    const binding = await student(uid), sid = documentId(data.sessionId), ref = db.doc(`classes/${binding.classId}/sessions/${sid}`);
+    const op = opRef(uid, 'resumeSession', data.requestId), fingerprint = hash(sid);
+    return db.runTransaction(async tx => {
+      const [snap, member, prior] = await Promise.all([tx.get(ref),tx.get(studentRef(binding)),tx.get(op)]);
+      await assertStudentTx(tx, member, binding, uid);
+      const previous = checkOp(prior, fingerprint); if (previous) return previous;
+      if (!snap.exists || snap.data().studentId !== binding.studentId || snap.data().status !== 'playing') fail('SESSION_NOT_ACTIVE');
+      const s = unpackSession(snap.data()); if (sessionExpired(s)) fail('SESSION_EXPIRED');
+      if (data.expectedRevision !== s.revision) fail('REVISION_CONFLICT');
+      if (s.progressState === 'paused') { s.progressState = 'running'; s.revision++; tx.update(ref, { progressState: 'running', revision: s.revision }); }
+      const result = JSON.parse(JSON.stringify(safeSession(s))); tx.create(op, { fingerprint, resultJson: JSON.stringify(result) }); return result;
+    });
+  });
   const startSession = call(async (data, uid) => {
     fields(data, ['gameId', 'mode', 'requestId']); requestId(data);
     if (data.gameId !== GAME.gameId || data.mode !== 'regular') fail('INVALID_REQUEST');
@@ -554,27 +603,27 @@ export function createHandlers(db, secret) {
       if (!classSnap.exists || classSnap.data().status !== 'active') fail('FORBIDDEN');
       if (pointer.exists) {
         const old = await tx.get(db.doc(`classes/${binding.classId}/sessions/${pointer.data().sessionId}`));
-        if (old.exists && old.data().status === 'playing' && old.data().expiresAt > now()) {
+        if (old.exists && old.data().status === 'playing' && !sessionExpired(old.data())) {
           tx.create(op, { fingerprint, result: { sessionId: old.id } });
           return safeSession(old.data());
         }
       }
       const seed = randomBytes(4).readUInt32BE(), sessionId = randomId(), startedAt = now();
-      const s = buildSession(seed); Object.assign(s, { sessionId, studentId: binding.studentId, classId: binding.classId, startedAt, seasonId: seasonOf(startedAt), expiresAt: new Date(Date.now() + 86400000).toISOString(), revision: 0, mode: 'regular' });
+      const s = buildSession(seed); Object.assign(s, { sessionId, studentId: binding.studentId, classId: binding.classId, startedAt, seasonId: seasonOf(startedAt), expiresAt: null, progressState: 'running', storageVersion: 2, revision: 0, mode: 'regular' });
       tx.create(db.doc(`classes/${binding.classId}/sessions/${sessionId}`), packSession(s));
       tx.set(active, { sessionId }); tx.create(op, { fingerprint, result: { sessionId } });
       return safeSession(s);
     });
   });
 
-  const getSession = call(async (data, uid) => {
-    fields(data, ['sessionId']); const binding = await student(uid), id = str(data.sessionId, 80);
+  async function readStudentSession(id, uid, binding) {
+    id = str(id, 80);
     const ref = db.doc(`classes/${binding.classId}/sessions/${id}`), snap = await ref.get();
     if (!snap.exists || snap.data().studentId !== binding.studentId) fail('FORBIDDEN');
-    if (snap.data().status === 'playing' && snap.data().expiresAt <= now()) {
+    if (snap.data().status === 'playing' && sessionExpired(snap.data())) {
       return db.runTransaction(async tx => {
         const current = await tx.get(ref), s = unpackSession(current.data());
-        if (s.status === 'playing' && s.expiresAt <= now()) {
+        if (s.status === 'playing' && sessionExpired(s)) {
           s.status = 'incomplete'; s.endReason = 'expired'; s.finishedAt = now();
           const active = db.doc(`activeSessions/${digest(`${uid}:${GAME.gameId}`)}`), pointer = await tx.get(active);
           tx.update(ref, { status: s.status, endReason: s.endReason, finishedAt: s.finishedAt });
@@ -584,6 +633,9 @@ export function createHandlers(db, secret) {
       });
     }
     return safeSession(snap.data());
+  }
+  const getSession = call(async (data, uid) => {
+    fields(data, ['sessionId']); return readStudentSession(data.sessionId, uid, await student(uid));
   });
 
   const submitAnswer = call(async (data, uid) => {
@@ -600,12 +652,12 @@ export function createHandlers(db, secret) {
       await assertStudentTx(tx, member, binding, uid);
       const previous = checkOp(prior, fingerprint); if (previous) return previous;
       if (!snap.exists || snap.data().studentId !== binding.studentId || snap.data().status !== 'playing') fail('SESSION_NOT_ACTIVE');
-      const s = unpackSession(snap.data()); if (s.expiresAt <= now()) fail('SESSION_EXPIRED');
+      const s = unpackSession(snap.data()); if (sessionExpired(s)) fail('SESSION_EXPIRED'); if (s.progressState === 'paused') fail('SESSION_PAUSED');
       if (data.expectedRevision !== undefined && data.expectedRevision !== s.revision) fail('REVISION_CONFLICT');
       const q = s.questions[s.currentIndex]; if (!q || q.id !== questionId) fail('REVISION_CONFLICT');
       const result = data.skip ? { accepted: skipQuestion(q), final: true, correct: false, item: q } : evaluateStep(q, data.response);
       if (!result.accepted) return { accepted: false, reason: result.reason, session: safeSession(s) };
-      s.feedbackIndex = q.index; s.revision++;
+      s.feedbackIndex = q.index; s.uiState = null; s.revision++;
       if (result.final) s.currentIndex++;
       let refs, rankStudent, rankClass, sheetExport;
       if (s.currentIndex === 50 && result.final) {
@@ -626,7 +678,7 @@ export function createHandlers(db, secret) {
       }
       const response = JSON.parse(JSON.stringify({ accepted: true, final: Boolean(result.final), correct: Boolean(result.correct), session: safeSession(s) }));
       if (result.final) tx.set(sref.collection('answers').doc(String(q.index).padStart(2, '0')), { questionIndex: q.index, typeId: q.typeId, subtype: q.subtype, firstResponse: q.firstResponse, firstCorrect: q.firstCorrect, skipped: Boolean(q.skipped), requestId: data.requestId, receivedAt: now() });
-      tx.update(sref, { questionsJson: JSON.stringify(s.questions), currentIndex: s.currentIndex, feedbackIndex: s.feedbackIndex, revision: s.revision, status: s.status, finishedAt: s.finishedAt || null, endReason: s.endReason || null });
+      tx.update(sref, { questionsJson: JSON.stringify(s.questions), currentIndex: s.currentIndex, feedbackIndex: s.feedbackIndex, uiState: null, revision: s.revision, status: s.status, finishedAt: s.finishedAt || null, endReason: s.endReason || null });
       if (refs) projectRank(tx, refs, s, rankStudent, rankClass, studentRef(binding));
       if (sheetExport) tx.set(db.doc(`sheetJobs/${binding.classId}`), { state: 'pending', dirty: `${s.sessionId}:${s.revision}`, nextRunAt: 0 });
       tx.create(op, { fingerprint, resultJson: JSON.stringify(response) }); return response;
@@ -709,5 +761,5 @@ export function createHandlers(db, secret) {
     return { boardKey: `${key}:${data.scope}`, scope: data.scope, asOf: now(), projectionVersion: 1, entries, nextCursor, myEntry, rankStatus: 'ready' };
   });
 
-  return { createTeacherSpace, recoverTeacherSpace, createClass, ensureClassJoinCode, listClasses, listPendingStudents, listClassSessions, getSessionDetails, setClassGlobalParticipation, approveStudent, listClassStudents, renameStudent, removeStudent, getTeacherLeaderboard, issueStudentReturnTicket, redeemStudentReturnTicket, detachStudentDevice, requestJoin, getStudentStatus, getClassLoginRoster, setStudentPin, loginStudentPin, changeStudentPin, startSession, getSession, submitAnswer, finishSession, setGlobalParticipation, getLeaderboard };
+  return { createTeacherSpace, recoverTeacherSpace, createClass, ensureClassJoinCode, listClasses, listPendingStudents, listClassSessions, getSessionDetails, setClassGlobalParticipation, approveStudent, listClassStudents, renameStudent, removeStudent, getTeacherLeaderboard, issueStudentReturnTicket, redeemStudentReturnTicket, detachStudentDevice, requestJoin, getStudentStatus, getClassLoginRoster, setStudentPin, loginStudentPin, changeStudentPin, getStudentGames, saveSession, resumeSession, startSession, getSession, submitAnswer, finishSession, setGlobalParticipation, getLeaderboard };
 }

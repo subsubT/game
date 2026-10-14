@@ -12,6 +12,8 @@ let body = source
   .replace("from './lib/core.js'", "from '../../src/games/1math3/core.js'")
   .replace("from './lib/join-code.js'", "from '../../src/server/join-code.js'")
   .replace("from './lib/student-pin.js'", "from '../../src/server/student-pin.js'")
+  .replace("from './lib/catalog.js'", "from '../../src/games/catalog.js'")
+  .replace("from './lib/session-progress.js'", "from '../../src/games/session-progress.js'")
   .replace(/initializeApp\(\);\r?\nconst db = getFirestore\(\);\r?\n/, '')
   .replace(/^const region = 'asia-northeast3';\r?\n/m, '')
   .replace(/^const secret = process\.env\.MATH3_SERVER_SECRET.*\r?\n/m, '')

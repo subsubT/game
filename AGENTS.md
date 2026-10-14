@@ -1,6 +1,7 @@
 # 현재 공개 서비스 운영 결정 (2026-10-07)
 
 - 2026-10-14 개편은 A(학생 PIN 로그인) → B(게임 선택/자유 저장) → C(전체 실제 검증/main/공개 배포) 순서이며 각 PASS·상태 문서 갱신 후 중단한다. A는 `codex/student-pin-checkpoint-a`에서 개발 검증 PASS. 아직 운영에 적용하지 않았다. 현재 인계는 `docs/CHECKPOINT_A_STUDENT_PIN.md`와 `docs/DEVELOPMENT_STATE.md`를 따른다. main/Pages/기존 Worker 반영은 C에서 한다.
+- B도 `codex/game-save-checkpoint-b`에서 개발 검증 PASS. 최신 인계는 `docs/CHECKPOINT_B_GAME_PROGRESS.md`와 `docs/DEVELOPMENT_STATE.md`이다. 2026-10-14 사용자가 1math3의 시간 제한 없음을 확정했으며 새 회차/저장 전환 회차는 기한 없이 이어갈 수 있도록 구현한다. 다음은 C이며 아직 main/운영에 반영하지 않았다.
 
 - GitHub 저장소: `https://github.com/subsubT/game`; Pages: `https://subsubt.github.io/game/`.
 - 1math3 Firebase: `math3-dev`; Worker: `math3-cp3-dev`; API: `https://math3-cp3-dev.subsubt-math3-dev.workers.dev`.
