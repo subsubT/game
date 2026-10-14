@@ -32,6 +32,7 @@ function errorText(error) {
   if (code.includes('RATE_LIMITED') || code.includes('RESOURCE_EXHAUSTED')) return '요청이 너무 많습니다. 잠시 후 다시 시도하세요.';
   if (code === 'JOIN_CODE_BUSY') return '참여 코드 발급이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.';
   if (code.includes('INVALID_NAME')) return '이름은 1~12자로 입력해 주세요.';
+  if (code.includes('INVALID_PIN')) return 'PIN은 숫자 4자리로 두 번 똑같이 입력해 주세요.';
   if (code.includes('NOT_FOUND')) return '해당 자료를 찾을 수 없습니다. 새로고침해 주세요.';
   if (code.includes('NETWORK') || code.includes('FETCH')) return '네트워크 연결을 확인하고 다시 시도하세요.';
   return '요청을 완료하지 못했습니다. 잠시 후 다시 시도하세요.';
@@ -88,7 +89,7 @@ function renderClass(cls) {
 }
 function renderTab(cls) {
   if (state.tab === 'home') return `<div class="stack"><section class="card"><h3>학급 참여 코드</h3><p class="code">${escapeHtml(cls.code)}</p><p class="muted small">학생이 코드를 입력하면 바로 학급에 소속됩니다. 교사 인증이나 복구에는 사용할 수 없습니다.</p><p>전체 순위 등록: <span class="pill ${cls.globalOptIn?'':'off'}">${cls.globalOptIn?'켜짐':'꺼짐'}</span> · 학생별 독립 별명을 사용하며 학급과 실제 이름은 공개되지 않습니다.</p><button class="button ${cls.globalOptIn?'danger':'secondary'}" data-action="class-global">전체 순위 등록 ${cls.globalOptIn?'해제':'복원'}</button></section><div class="two"><section class="card"><h3>학생 관리</h3><p>학생 목록에서 이름을 변경하거나 학생을 삭제할 수 있습니다.</p><button class="button" data-action="tab" data-tab="students">학생 목록 보기</button></section><section class="card"><h3>최근 게임 기록</h3>${recentRecords()}</section></div></div>`;
-  if (state.tab === 'students') return `<section class="card"><div class="heading-row"><h3>소속 학생</h3>${studentEditor()}<div class="field"><label for="student-search" class="visually-hidden">학생 찾기</label><input id="student-search" type="search" placeholder="이름 또는 별명 찾기" autocomplete="off"></div></div>${state.students.length?`<div class="table-wrap"><table class="data"><thead><tr><th>이름 / 별명</th><th>상태</th><th>최고 점수</th><th>최근 수행</th><th>전체 등록</th><th>작업</th></tr></thead><tbody id="student-rows">${state.students.map(s=>{const x=studentStats(s.studentId);return `<tr data-search="${escapeHtml(`${nameOf(s)} ${s.classAlias}`.toLowerCase())}"><td><strong>${escapeHtml(nameOf(s))}</strong><br><span class="muted small">${escapeHtml(s.classAlias)}</span></td><td><span class="pill">소속됨</span></td><td>${x.best===null?'—':`${x.best}점`}</td><td>${x.latest?dateLabel(x.latest.startedAt):'기록 없음'}</td><td>${s.globalOptIn?'켜짐':'꺼짐'}</td><td class="row-actions"><button class="button secondary small" data-action="student" data-id="${escapeHtml(s.studentId)}">기록 보기</button><button class="button secondary small" data-action="ticket" data-id="${escapeHtml(s.studentId)}">복귀 티켓</button><button class="button secondary small" data-action="rename-student" data-id="${escapeHtml(s.studentId)}">이름 변경</button><button class="button danger small" data-action="remove-student" data-id="${escapeHtml(s.studentId)}">학생 삭제</button></td></tr>`}).join('')}</tbody></table></div>`:empty('소속 학생이 없습니다.')}</section>`;
+  if (state.tab === 'students') return `<section class="card"><div class="heading-row"><h3>소속 학생</h3>${studentEditor()}<div class="field"><label for="student-search" class="visually-hidden">학생 찾기</label><input id="student-search" type="search" placeholder="이름 또는 별명 찾기" autocomplete="off"></div></div>${state.students.length?`<div class="table-wrap"><table class="data"><thead><tr><th>이름 / 별명</th><th>상태</th><th>최고 점수</th><th>최근 수행</th><th>전체 등록</th><th>작업</th></tr></thead><tbody id="student-rows">${state.students.map(s=>{const x=studentStats(s.studentId);return `<tr data-search="${escapeHtml(`${nameOf(s)} ${s.classAlias}`.toLowerCase())}"><td><strong>${escapeHtml(nameOf(s))}</strong><br><span class="muted small">${escapeHtml(s.classAlias)}</span></td><td><span class="pill">소속됨</span></td><td>${x.best===null?'—':`${x.best}점`}</td><td>${x.latest?dateLabel(x.latest.startedAt):'기록 없음'}</td><td>${s.globalOptIn?'켜짐':'꺼짐'}</td><td class="row-actions"><button class="button secondary small" data-action="student" data-id="${escapeHtml(s.studentId)}">기록 보기</button><button class="button secondary small" data-action="ticket" data-id="${escapeHtml(s.studentId)}">복귀 티켓</button><button class="button secondary small" data-action="pin-student" data-id="${escapeHtml(s.studentId)}">PIN 관리</button><button class="button secondary small" data-action="rename-student" data-id="${escapeHtml(s.studentId)}">이름 변경</button><button class="button danger small" data-action="remove-student" data-id="${escapeHtml(s.studentId)}">학생 삭제</button></td></tr>`}).join('')}</tbody></table></div>`:empty('소속 학생이 없습니다.')}</section>`;
   if (state.tab === 'records') return renderRecords();
   return renderRank(cls);
 }
@@ -195,6 +196,7 @@ async function initialize() {
 
 app.addEventListener('submit',event=>{
   event.preventDefault();const form=event.target;
+  if(form.id==='change-pin') { const pin=form.querySelector('#new-pin').value,pinConfirm=form.querySelector('#confirm-pin').value;form.reset();work(async()=>{await call('changeStudentPin',{classId:state.selected,studentId:state.editingPin,pin,pinConfirm,requestId:crypto.randomUUID()});state.editingPin=null;await loadClass();},'새 PIN을 저장했습니다. 학생은 새 PIN으로 다시 로그인해야 합니다.'); }
   if(form.id==='rename-student')work(async()=>{await call('renameStudent',{classId:state.selected,studentId:state.editingStudent,privateName:form.querySelector('#student-name').value.trim(),requestId:crypto.randomUUID()});state.editingStudent=null;await loadClass();},'학생 이름을 변경했습니다.');
   if(form.id==='create-class')work(async()=>{const label=form.querySelector('#class-label').value.trim();const c=await call('createClass',{privateLabel:label,requestId:crypto.randomUUID()});state.tab='home';await refreshClasses(c.classId);},'새 학급을 만들었습니다.');
   if(form.id==='recover-space')work(async()=>{const key=form.querySelector('#recovery').value.trim();const result=await call('recoverTeacherSpace',{recoveryKey:key,requestId:crypto.randomUUID()});form.reset();state.recoveryKey=result.recoveryKey;await refreshClasses();},'관리 공간을 복구했습니다. 새 복구 키를 보관하세요.');
@@ -229,10 +231,16 @@ app.addEventListener('click',event=>{
   if(action==='retry-init'){app.innerHTML='<p class="loading">다시 연결하는 중…</p>';initialize();return;}
   if(action==='create-space')work(async()=>{const result=await call('createTeacherSpace',{requestId:crypto.randomUUID()});state.recoveryKey=result.recoveryKey||'';await refreshClasses();},'관리 공간을 만들었습니다. 복구 키를 보관하세요.');
   if(action==='hide-key'){state.recoveryKey='';renderShell();}
-  if(action==='select-class'){state.googleDisconnectPending=false;state.selected=id;state.tab='home';state.studentId=null;state.sessionId=null;state.details=null;work(()=>loadClass());}
+  if(action==='select-class'){state.editingPin=null;state.editingStudent=null;state.googleDisconnectPending=false;state.selected=id;state.tab='home';state.studentId=null;state.sessionId=null;state.details=null;work(()=>loadClass());}
   if(action==='refresh')work(async()=>{await refreshClasses(state.selected);},'학급 자료를 새로 읽었습니다.');
   if(action==='tab'){state.tab=button.dataset.tab;work(()=>loadClass());}
-  if(action==='rename-student'){state.editingStudent=id;renderShell();app.querySelector('#student-name')?.focus();}
+  if(action==='rename-student'){state.editingPin=null;state.editingStudent=id;renderShell();app.querySelector('#student-name')?.focus();}
+  if(action==='pin-student'){state.editingStudent=null;state.editingPin=id;renderShell();app.querySelector('#new-pin')?.focus();}
+  if(action==='pin-cancel'){state.editingPin=null;renderShell();}
+  if(action==='pin-reset'){
+    const student=state.students.find(s=>s.studentId===state.editingPin);if(!student||!confirm(`${nameOf(student)} 학생의 PIN을 초기화할까요? 현재 접속과 기존 복귀 티켓이 해제됩니다. 새 복귀 티켓으로 기록을 찾은 뒤 PIN을 등록해야 합니다.`))return;
+    work(async()=>{await call('changeStudentPin',{classId:state.selected,studentId:state.editingPin,reset:true,requestId:crypto.randomUUID()});state.editingPin=null;await loadClass();},'PIN을 초기화했습니다. 학생에게 새 복귀 티켓을 발급해 주세요.');
+  }
   if(action==='rename-cancel'){state.editingStudent=null;renderShell();}
   if(action==='remove-student'){
     const student=state.students.find(s=>s.studentId===id);if(!student||!confirm(`${nameOf(student)} 학생을 학급과 순위에서 삭제할까요? 학급 이용 권한이 해제되며, 학습 기록은 복원용으로 보관됩니다.`))return;
@@ -259,6 +267,7 @@ setInterval(async()=>{
 },30000);
 
 function studentEditor(){
+  if(state.editingPin) { const s=state.students.find(s=>s.studentId===state.editingPin);if(!s)return '';return `<form id="change-pin" class="notice"><h3>${escapeHtml(nameOf(s))} 학생 PIN 관리</h3><p>기존 PIN은 확인할 수 없습니다. 변경하면 현재 접속이 해제됩니다.</p><div class="field"><label for="new-pin">새 숫자 4자리 PIN</label><input id="new-pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" required></div><div class="field"><label for="confirm-pin">새 PIN 확인</label><input id="confirm-pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" required></div><button class="button small" type="submit">새 PIN 저장</button> <button class="button danger small" type="button" data-action="pin-reset">PIN 초기화</button> <button class="button secondary small" type="button" data-action="pin-cancel">취소</button></form>`; }
   const student=state.students.find(s=>s.studentId===state.editingStudent);
   if(!student)return '';
   return `<form id="rename-student" class="notice"><p>${escapeHtml(nameOf(student))} 학생 이름 변경</p><div class="field"><label for="student-name">새 학생 이름</label><input id="student-name" maxlength="12" required value="${escapeHtml(student.privateName || '')}"></div><button class="button small" type="submit">이름 저장</button> <button class="button secondary small" type="button" data-action="rename-cancel">취소</button></form>`;

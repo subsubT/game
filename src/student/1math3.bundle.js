@@ -262,6 +262,7 @@ class FirebaseGameService extends GameService {
       authSdk.connectAuthEmulator(this.auth, `http://${this.config.emulators.host || '127.0.0.1'}:${this.config.emulators.auth || 9099}`, { disableWarnings: true });
       if (functionsSdk) functionsSdk.connectFunctionsEmulator(this.functions, this.config.emulators.host || '127.0.0.1', this.config.emulators.functions || 5001);
     }
+    await this.auth.authStateReady();
     if (!this.auth.currentUser) await authSdk.signInAnonymously(this.auth);
     const status = await this.invoke('getStudentStatus', {});
     this.updateStatus(status);
@@ -274,6 +275,7 @@ class FirebaseGameService extends GameService {
     this.memory.joined = status.status !== 'new'; this.memory.approved = status.status === 'approved';
     this.memory.classAlias = status.classAlias || ''; this.memory.checkMark = status.checkMark || '';
     this.memory.privateName = status.privateName || '';
+    this.memory.pinRequired = status.status === 'pin-required';
     if (status.globalParticipation !== undefined) this.memory.globalParticipation = status.globalParticipation;
     return status;
   }
@@ -308,12 +310,31 @@ class FirebaseGameService extends GameService {
   }
   remember(session) { this.memory.session = session; if (session?.mode === 'regular') this.storage?.setItem(SESSION_KEY, session.sessionId); return session; }
   async refreshStatus() { return this.updateStatus(await this.call('getStudentStatus', {})); }
-  async joinClass(code, nickname = '') {
-    const result = await this.mutation('requestJoin', { code, privateName: nickname }, 'join');
+  async joinClass(code, nickname = '', pin, pinConfirm) {
+    // PINs must never enter the persisted offline mutation queue.
+    const result = await this.call('requestJoin', { code, privateName: nickname, pin, pinConfirm, requestId: crypto.randomUUID() });
+    this.updateStatus(result); return result;
+  }
+  async getLoginRoster(code) { return this.call('getClassLoginRoster', { code }); }
+  async loginPin(grant, studentId, pin) {
+    const result = await this.call('loginStudentPin', { grant, studentId, pin, requestId: crypto.randomUUID() });
+    this.storage?.removeItem(SESSION_KEY); this.storage?.removeItem(REQUEST_KEY);
+    this.pending = {}; this.memory.session = null;
+    this.pinSetupId = null;
+    this.updateStatus(result); return result;
+  }
+  async setPin(pin, pinConfirm) {
+    await this.ready;
+    // Retain only a non-secret request ID when a response is lost. A retry
+    // with a different PIN must not be reported as having saved that PIN.
+    this.pinSetupId ||= crypto.randomUUID();
+    const result = await this.invoke('setStudentPin', { pin, pinConfirm, requestId: this.pinSetupId });
+    this.pinSetupId = null;
     this.updateStatus(result); return result;
   }
   async redeemTicket(ticket) {
     const result = await this.mutation('redeemStudentReturnTicket', { ticket }, 'redeem-ticket');
+    this.pinSetupId = null;
     this.updateStatus(result); return result;
   }
   async startSession(gameId, { mode = 'regular', restart = false } = {}) {
@@ -355,11 +376,12 @@ class FirebaseGameService extends GameService {
   }
   async switchStudent() {
     await this.ready;
-    if (this.memory.approved) await this.invoke('detachStudentDevice', {});
+    if (this.memory.joined) await this.invoke('detachStudentDevice', {});
     await this.authSdk.signOut(this.auth);
     this.storage?.removeItem(SESSION_KEY); this.storage?.removeItem(REQUEST_KEY);
     this.storage?.removeItem('1math3.mock.v1');
     this.pending = {}; this.memory = { joined: false, approved: false, globalParticipation: true, session: null, classAlias: '' };
+    this.pinSetupId = null;
     this.practice = new MockGameService(this.storage);
     await this.authSdk.signInAnonymously(this.auth);
   }
@@ -427,8 +449,37 @@ function rankContent() {
 async function loadBoard() { try { ui.board = await service.getLeaderboard(ui.tab, ui.view === 'result' && session?.seasonId ? session.seasonId : currentSeason()); ui.boardError = ''; } catch { ui.board = null; ui.boardError = ui.tab === 'class' && !service.memory.approved ? '우리 반 순위는 학급 참여 후 볼 수 있어요.' : '순위를 불러오지 못했어요. 다시 눌러 주세요.'; } if (ui.view === 'home' || ui.view === 'result') render(); }
 
 function joinView() {
+  if (live) return pinLoginView();
   const joined=service.memory.approved;
   return `<section class="panel"><div class="eyebrow">우리 반과 함께</div><h1>학급 참여</h1>${joined ? `<div class="notice"><strong>학급에 참여했어요.</strong><br>${service.memory.privateName ? `이름: ${esc(service.memory.privateName)}<br>` : ''}우리 반 별명: ${esc(service.memory.classAlias)}</div><div class="actions">${btn('기록 도전 계속','record')} ${btn('처음으로','home','button light')}</div>` : `<p>선생님이 알려 준 코드를 입력하면 바로 참여해요.</p><label class="input-label" for="join-code">학급 참여 코드</label><input id="join-code" class="text-input" type="text" inputmode="numeric" maxlength="12" autocomplete="off" placeholder="숫자 4자리 코드"><label class="input-label" for="nickname">선생님께 보일 이름 (선택)</label><input id="nickname" class="text-input" maxlength="12" autocomplete="off" placeholder="이름 없이 참여할 수 있어요"><div class="actions">${btn('학급 참여하기','join-submit')} ${btn('처음으로','home','button light')}</div>${live ? `<hr><label class="input-label" for="return-ticket">선생님에게 받은 일회용 복귀 코드</label><input id="return-ticket" class="text-input" autocomplete="off" maxlength="80"><div class="actions">${btn('내 기록 이어받기','redeem-ticket','button secondary')}</div>` : ''}`}<p id="join-error" class="error" role="status">${esc(ui.error)}</p></section>`;
+}
+function pinInputs(confirm = false) {
+  return `<label class="input-label" for="student-pin">숫자 4자리 비밀번호</label><input id="student-pin" class="text-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" placeholder="숫자 4개">${confirm ? '<label class="input-label" for="pin-confirm">비밀번호 한 번 더</label><input id="pin-confirm" class="text-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" placeholder="같은 숫자 4개">' : ''}`;
+}
+function pinLoginView() {
+  const step = service.memory.pinRequired ? 'migrate' : (ui.loginStep || 'code');
+  let body;
+  if (service.memory.approved) body = `<p>${esc(service.memory.privateName)} 학생, 반가워요!</p><div class="actions">${btn('계속하기','home')} ${btn('로그아웃','switch-student','button light')}</div>`;
+  else if (step === 'migrate') body = `<p>${esc(service.memory.privateName || service.memory.classAlias)} 학생의 기존 기록을 찾았어요.<br>다음에도 쓸 비밀번호를 정해 주세요.</p>${pinInputs(true)}<div class="actions">${btn('비밀번호 저장','pin-migrate')} ${btn('학생 바꾸기','switch-student','button light')}</div>`;
+  else if (step === 'list') body = `<p>내 이름을 눌러 주세요.<br><span class="micro">같은 이름이면 번호와 별명을 확인해요.</span></p><div class="student-choices">${(ui.loginRoster?.students || []).map(s => `<button class="button secondary" data-action="choose-student" data-id="${esc(s.studentId)}"><strong>${esc(s.privateName)}</strong><span class="micro">${s.choiceNumber}번 · ${esc(s.classAlias)}</span></button>`).join('') || '<p>아직 등록한 친구가 없어요.</p>'}</div><div class="actions">${btn('처음 왔어요 · 새 이름 등록','new-student')} ${btn('학급 코드 다시 입력','login-code-back','button light')}</div>`;
+  else if (step === 'register') body = `<p>내 이름과 비밀번호를 정해 주세요.</p><label class="input-label" for="nickname">내 이름</label><input id="nickname" class="text-input" maxlength="12" autocomplete="off" placeholder="이름">${pinInputs(true)}<div class="actions">${btn('등록하기','pin-register')} ${btn('이름 목록으로','login-list-back','button light')}</div>`;
+  else if (step === 'pin') { const s = ui.loginRoster?.students.find(s => s.studentId === ui.loginStudent); body = `<p><strong>${esc(s?.privateName)}</strong> · ${s?.choiceNumber}번<br>${esc(s?.classAlias)}</p>${s?.pinReady ? `${pinInputs()}<div class="actions">${btn('들어가기','pin-login')}</div>` : '<p class="notice">기존 기록을 보호하고 있어요. 전에 쓰던 기기에서 비밀번호를 등록하거나 선생님께 도움을 받아 주세요.</p>'}<p class="micro">비밀번호를 잊었으면 선생님께 알려 주세요.</p>${btn('다른 이름 선택','login-list-back','button light')}`; }
+  else body = `<p>선생님이 알려 준 학급 코드를 입력해요.</p><label class="input-label" for="join-code">학급 코드</label><input id="join-code" class="text-input" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" placeholder="숫자 4자리"><div class="actions">${btn('우리 반 이름 보기','login-roster')} ${btn('처음으로','home','button light')}</div><details><summary>선생님께 복귀 코드를 받았어요</summary><label class="input-label" for="return-ticket">일회용 복귀 코드</label><input id="return-ticket" class="text-input" autocomplete="off" maxlength="80">${btn('기존 기록 찾기','redeem-ticket','button secondary')}</details>`;
+  return `<section class="panel"><div class="eyebrow">우리 반과 함께</div><h1>학생 로그인</h1>${body}<p class="error" role="status">${esc(ui.error)}</p></section>`;
+}
+function loginError(error) {
+  if (error.message === 'RATE_LIMITED') return '여러 번 시도했어요. 15분 뒤에 다시 하거나 선생님께 알려 주세요.';
+  if (error.message === 'INVALID_PIN') return '숫자 4개를 입력하고, 두 번 같은지 확인해 주세요.';
+  if (error.message === 'INVALID_NAME') return '이름을 1~12자로 입력해 주세요.';
+  if (error.message === 'REQUEST_CONFLICT' || error.message === 'PIN_ALREADY_SET') return '이미 등록한 비밀번호가 있어요. 처음 입력한 비밀번호로 다시 해 보거나 새로고침해 주세요.';
+  if (error.message === 'LOGIN_FAILED') return '비밀번호를 확인해 주세요. 계속 안 되면 학급 코드를 다시 입력하거나 선생님께 알려 주세요.';
+  return '연결을 확인하지 못했어요. 잠시 후 다시 해 보세요.';
+}
+async function loginWork(work) {
+  ui.busy = true;
+  try { await work(); ui.error = ''; if (service.memory.approved) { session = null; ui.loginRoster = null; ui.loginCode = ''; ui.loginStudent = ''; ui.loginStep = 'code'; ui.view = 'home'; ui.board = null; } }
+  catch (error) { ui.error = loginError(error); }
+  finally { ui.busy = false; render(); if (service.memory.approved) loadBoard(); }
 }
 function introView() {
   const regular = ui.mode === 'regular';
@@ -500,6 +551,17 @@ function reviewView() {
 root.addEventListener('click', async e => {
   const b = e.target.closest('[data-action]'); if (!b || ui.busy) return;
   const action = b.dataset.action;
+  if (['login-roster','choose-student','new-student','login-code-back','login-list-back','pin-register','pin-login','pin-migrate'].includes(action)) {
+    if (action === 'login-roster') { const code = root.querySelector('#join-code').value; await loginWork(async () => { ui.loginRoster = await service.getLoginRoster(code); ui.loginCode = code; ui.loginStep = 'list'; }); }
+    else if (action === 'choose-student') { ui.loginStudent = b.dataset.id; ui.loginStep = 'pin'; ui.error = ''; render(); }
+    else if (action === 'new-student') { ui.loginStep = 'register'; ui.error = ''; render(); }
+    else if (action === 'login-code-back') { ui.loginRoster = null; ui.loginCode = ''; ui.loginStep = 'code'; ui.error = ''; render(); }
+    else if (action === 'login-list-back') { ui.loginStep = 'list'; ui.error = ''; render(); }
+    else if (action === 'pin-register') { const name = root.querySelector('#nickname').value.trim(), pin = root.querySelector('#student-pin').value, confirm = root.querySelector('#pin-confirm').value; await loginWork(() => service.joinClass(ui.loginCode, name, pin, confirm)); }
+    else if (action === 'pin-login') { const pin = root.querySelector('#student-pin').value; await loginWork(() => service.loginPin(ui.loginRoster.grant, ui.loginStudent, pin)); }
+    else if (action === 'pin-migrate') { const pin = root.querySelector('#student-pin').value, confirm = root.querySelector('#pin-confirm').value; await loginWork(() => service.setPin(pin, confirm)); }
+    return;
+  }
   if (action === 'digit') { ui.refocus = `[data-action="digit"][data-value="${b.dataset.value}"]`; ui.draft = (ui.draft + b.dataset.value).slice(0, 2); ui.error = ''; render(); }
   else if (action === 'clear') { ui.refocus = '[data-action="clear"]'; ui.draft = ''; ui.error = ''; render(); }
   else if (action === 'card') { const i = Number(b.dataset.index); ui.refocus = `[data-action="card"][data-index="${i}"]`; ui.selected = ui.selected.includes(i) ? ui.selected.filter(x => x !== i) : ui.selected.length < 2 ? [...ui.selected, i] : ui.selected; render(); }
@@ -514,7 +576,7 @@ root.addEventListener('click', async e => {
   }
   else if (action === 'redeem-ticket') { ui.busy = true; try { await service.redeemTicket(root.querySelector('#return-ticket').value.trim()); ui.error = ''; } catch { ui.error = '복귀 코드를 확인하지 못했어요. 선생님께 새 코드를 받아 주세요.'; } finally { ui.busy = false; render(); } }
   else if (action === 'refresh-status') { ui.busy = true; try { await service.refreshStatus(); ui.error = ''; } catch { ui.error = '학급 소속 상태를 확인하지 못했어요.'; } finally { ui.busy = false; render(); } }
-  else if (action === 'switch-student') { ui.busy = true; try { await service.switchStudent(); session = null; ui.view = 'home'; ui.board = null; ui.error = ''; } catch { ui.error = '학생 바꾸기를 완료하지 못했어요. 네트워크를 확인해 주세요.'; } finally { ui.busy = false; render(); loadBoard(); } }
+  else if (action === 'switch-student') { ui.busy = true; try { await service.switchStudent(); session = null; ui.view = 'home'; ui.board = null; ui.error = ''; ui.loginStep = 'code'; ui.loginRoster = null; ui.loginCode = ''; ui.loginStudent = '';  } catch { ui.error = '학생 바꾸기를 완료하지 못했어요. 네트워크를 확인해 주세요.'; } finally { ui.busy = false; render(); loadBoard(); } }
   else if (action === 'practice' || action === 'record') { ui.busy = true; try { if (live && action === 'record') { await service.refreshStatus(); if (!service.memory.approved) { ui.view = 'join'; ui.error = '학급 소속을 확인해 주세요. 선생님께 문의해 주세요.'; render(); return; } } ui.mode = action === 'record' ? 'regular' : 'practice'; ui.view = 'intro'; } catch { ui.error = '학급 연결을 확인하지 못했어요. 다시 시도해 주세요.'; } finally { ui.busy = false; render(); } }
   else if (action === 'start-now') {
     ui.busy = true; try { if (ui.mode === 'regular') await service.setGlobalParticipation(root.querySelector('#global-setting').checked); session = await service.startSession(GAME.gameId, { mode: ui.mode }); ui.draft = ''; ui.view = session.status === 'playing' ? 'playing' : 'result'; ui.error = ''; } catch { ui.error = '시작 상태를 확인하지 못했어요. 다시 시도해 주세요.'; } finally { ui.busy = false; render(); }
@@ -575,7 +637,7 @@ document.addEventListener('keydown', e => {
 document.querySelector('#sound-toggle').addEventListener('click', e => { ui.sound = !ui.sound; e.currentTarget.setAttribute('aria-pressed', String(ui.sound)); e.currentTarget.textContent = ui.sound ? '🔔 소리 켬' : '🔕 소리 끔'; });
 function playTone() { if (!ui.sound) return; try { const context = new AudioContext(), oscillator = context.createOscillator(), gain = context.createGain(); oscillator.frequency.value = 660; gain.gain.value = .035; oscillator.connect(gain); gain.connect(context.destination); oscillator.start(); oscillator.stop(context.currentTime + .1); oscillator.onended = () => context.close(); } catch {} }
 render();
-if (live) service.ready.then(() => { session = service.memory.session; if (session?.status === 'playing') { const pending = session.questions[session.feedbackIndex]; ui.view = pending?.status === 'answered' ? 'feedback' : session.questions[session.currentIndex]?.step === 'sum' ? 'pairFeedback' : 'playing'; } else if (session?.status === 'complete' || session?.status === 'incomplete') ui.view = 'result'; render(); loadBoard(); }).catch(() => { ui.boardError = 'Firebase 연결을 확인하지 못했어요. 설정과 네트워크를 확인해 주세요.'; render(); });
+if (live) service.ready.then(() => { session = service.memory.session; if (service.memory.pinRequired) ui.view = 'join'; else if (session?.status === 'playing') { const pending = session.questions[session.feedbackIndex]; ui.view = pending?.status === 'answered' ? 'feedback' : session.questions[session.currentIndex]?.step === 'sum' ? 'pairFeedback' : 'playing'; } else if (session?.status === 'complete' || session?.status === 'incomplete') ui.view = 'result'; render(); loadBoard(); }).catch(() => { ui.boardError = 'Firebase 연결을 확인하지 못했어요. 설정과 네트워크를 확인해 주세요.'; render(); });
 else loadBoard();
 })(core, services, firebaseService);
 })();

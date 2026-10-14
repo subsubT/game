@@ -53,7 +53,7 @@ test('Firebase Auth, Functions, Firestore Rules, isolation, ranking and retries'
     await assert.rejects(teacherB.call('listPendingStudents', { classId: classA.classId }));
 
     for (const [who, code] of [[studentA,classA.code],[studentB,classA.code],[studentC,classB.code],[pending,classB.code]]) {
-      const join=await who.call('requestJoin',{code,privateName:'학생',requestId:id()});assert.equal(join.status,'approved');assert.match(join.checkMark,/^\d\d$/);
+      const join=await who.call('requestJoin', {pin:'4826',pinConfirm:'4826',code,privateName:'학생',requestId:id()});assert.equal(join.status,'approved');assert.match(join.checkMark,/^\d\d$/);
       assert.equal((await who.call('getStudentStatus')).status,'approved');
     }
     assert.equal((await teacherA.call('listPendingStudents',{classId:classA.classId})).students.length,0);

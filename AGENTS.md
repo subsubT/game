@@ -1,5 +1,7 @@
 # 현재 공개 서비스 운영 결정 (2026-10-07)
 
+- 2026-10-14 개편은 A(학생 PIN 로그인) → B(게임 선택/자유 저장) → C(전체 실제 검증/main/공개 배포) 순서이며 각 PASS·상태 문서 갱신 후 중단한다. A는 `codex/student-pin-checkpoint-a`에서 개발 검증 PASS. 아직 운영에 적용하지 않았다. 현재 인계는 `docs/CHECKPOINT_A_STUDENT_PIN.md`와 `docs/DEVELOPMENT_STATE.md`를 따른다. main/Pages/기존 Worker 반영은 C에서 한다.
+
 - GitHub 저장소: `https://github.com/subsubT/game`; Pages: `https://subsubt.github.io/game/`.
 - 1math3 Firebase: `math3-dev`; Worker: `math3-cp3-dev`; API: `https://math3-cp3-dev.subsubt-math3-dev.workers.dev`.
 - 현재 Google OAuth Client/Drive/Sheets를 그대로 사용한다. 별도 production 환경 생성, 이름 변경, 데이터 이전은 하지 않는다.

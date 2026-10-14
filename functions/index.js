@@ -4,6 +4,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { randomBytes, createHash, createHmac, createCipheriv, createDecipheriv, timingSafeEqual } from 'node:crypto';
 import { GAME, buildSession, publicQuestion, evaluateStep, skipQuestion, summarize, questionExplanation } from './lib/core.js';
 import { generateJoinCode } from './lib/join-code.js';
+import { validPin, createPin, verifyPin } from './lib/student-pin.js';
 
 initializeApp();
 const db = getFirestore();
@@ -52,16 +53,23 @@ async function rateLimit(uid, operation, max, windowMs) {
   });
 }
 const options = { region, maxInstances: 20, memory: '512MiB' };
-const call = handler => onCall(options, async request => handler(request.data, uidOf(request)));
+const call = handler => onCall(options, async request => handler(request.data, uidOf(request), { network: request.rawRequest.ip || 'unknown' }));
 const studentRef = binding => db.doc(`classes/${binding.classId}/students/${binding.studentId}`);
 async function student(uid, pending = false) {
   const snap = await db.doc(`studentBindings/${uid}`).get();
   if (snap.exists && snap.data().active) {
     const binding = snap.data(), s = await studentRef(binding).get();
-    if (s.exists && s.data().status === 'active' && s.data().uid === uid) return { ...binding, data: s.data() };
+    if (s.exists && s.data().status === 'active' && s.data().uid === uid && (pending || (s.data().pinReady === true && binding.pinVersion === s.data().pinVersion))) return { ...binding, data: s.data() };
   }
   if (pending) return null;
   fail('PENDING_APPROVAL');
+}
+function memberValid(member, binding, uid) {
+  return member.exists && member.data().status === 'active' && member.data().uid === uid && member.data().pinReady === true && member.data().pinVersion === binding.pinVersion;
+}
+async function assertStudentTx(tx, member, binding, uid) {
+  const bound = await tx.get(db.doc(`studentBindings/${uid}`));
+  if (!memberValid(member, binding, uid) || !bound.data()?.active || bound.data().pinVersion !== binding.pinVersion || bound.data().bindingVersion !== binding.bindingVersion) fail('FORBIDDEN');
 }
 async function teacher(uid) {
   const snap = await db.doc(`teacherBindings/${uid}`).get();
@@ -266,7 +274,7 @@ export const approveStudent = call(async (data, uid) => {
 export const listClassStudents = call(async (data, uid) => {
   fields(data, ['classId']); const { ref } = await ownedClass(uid, data.classId);
   const snap = await ref.collection('students').where('status', '==', 'active').limit(200).get();
-  return { students: snap.docs.map(d => ({ studentId: d.id, privateName: d.data().privateName, classAlias: d.data().classAlias, checkMark: d.data().checkMark, globalOptIn: d.data().globalOptIn !== false, bestScores: d.data().bestScores || {} })) };
+  return { students: snap.docs.map(d => ({ studentId: d.id, privateName: d.data().privateName, classAlias: d.data().classAlias, checkMark: d.data().checkMark, pinReady: d.data().pinReady === true, globalOptIn: d.data().globalOptIn !== false, bestScores: d.data().bestScores || {} })) };
 });
 export const renameStudent = call(async (data, uid) => {
   fields(data, ['classId', 'studentId', 'privateName', 'requestId']); requestId(data);
@@ -326,26 +334,36 @@ export const issueStudentReturnTicket = call(async (data, uid) => {
   const studentId = documentId(data.studentId), snap = await ref.collection('students').doc(studentId).get();
   if (!snap.exists || snap.data().status !== 'active') fail('NOT_FOUND');
   const ticket = randomBytes(16).toString('base64url'), ticketHash = digest(ticket);
-  await db.doc(`studentReturnTickets/${ticketHash}`).create({ classId: data.classId, studentId, expiresAt: new Date(Date.now() + 600000).toISOString(), usedAt: null });
+  await db.doc(`studentReturnTickets/${ticketHash}`).create({ classId: data.classId, studentId, pinVersion: snap.data().pinVersion || 0, expiresAt: new Date(Date.now() + 600000).toISOString(), usedAt: null });
   return { ticket, expiresInSeconds: 600 };
 });
 export const redeemStudentReturnTicket = call(async (data, uid) => {
   fields(data, ['ticket', 'requestId']); requestId(data);
   const ticket = str(data.ticket, 80), ticketRef = db.doc(`studentReturnTickets/${digest(ticket)}`), op = opRef(uid, 'redeemTicket', data.requestId), fingerprint = hash(ticket);
   return db.runTransaction(async tx => {
-    const [prior, token, existing, pending] = await Promise.all([tx.get(op), tx.get(ticketRef), tx.get(db.doc(`studentBindings/${uid}`)), tx.get(db.doc(`joinRequests/${uid}`))]);
-    const previous = checkOp(prior, fingerprint); if (previous) return previous;
-    if (existing.exists || pending.exists || !token.exists || token.data().usedAt || token.data().expiresAt <= now()) fail('FORBIDDEN');
+    const [prior, token, existing, pending, teacherBinding] = await Promise.all([tx.get(op), tx.get(ticketRef), tx.get(db.doc(`studentBindings/${uid}`)), tx.get(db.doc(`joinRequests/${uid}`)), tx.get(db.doc(`teacherBindings/${uid}`))]);
+    if (teacherBinding.exists) fail('FORBIDDEN');
+    const previous = checkOp(prior, fingerprint);
+    if (previous) {
+      if (!existing.data()?.active) fail('FORBIDDEN');
+      const member = await tx.get(studentRef(existing.data()));
+      if (!member.exists || member.data().status !== 'active' || member.data().uid !== uid || (member.data().pinVersion || 0) !== (token.data()?.pinVersion || 0)) fail('FORBIDDEN');
+      return previous;
+    }
+    if (!token.exists || token.data().usedAt || token.data().expiresAt <= now()) fail('FORBIDDEN');
     const { classId, studentId } = token.data(), studentDoc = db.doc(`classes/${classId}/students/${studentId}`), studentSnap = await tx.get(studentDoc);
-    if (!studentSnap.exists || studentSnap.data().status !== 'active') fail('FORBIDDEN');
+    if (existing.exists && (existing.data().active || existing.data().removed || existing.data().classId !== classId || existing.data().studentId !== studentId)) fail('FORBIDDEN');
+    if (pending.exists && (pending.data().status !== 'joined' || pending.data().classId !== classId || pending.data().studentId !== studentId)) fail('FORBIDDEN');
+    if (!studentSnap.exists || studentSnap.data().status !== 'active' || (token.data().pinVersion || 0) !== (studentSnap.data().pinVersion || 0)) fail('FORBIDDEN');
     const oldUid = studentSnap.data().uid, oldBinding = db.doc(`studentBindings/${oldUid}`), oldPointer = db.doc(`activeSessions/${digest(`${oldUid}:${GAME.gameId}`)}`);
     const [bindingSnap, pointerSnap] = await Promise.all([tx.get(oldBinding), tx.get(oldPointer)]);
+    if (oldUid !== uid) deviceMoveBackup(tx, classId, studentId, studentSnap.data(), uid, bindingSnap, existing, pointerSnap);
     tx.update(ticketRef, { usedAt: now(), usedBy: uid });
     if (bindingSnap.exists) tx.update(oldBinding, { active: false });
     tx.update(studentDoc, { uid });
-    tx.create(db.doc(`studentBindings/${uid}`), { classId, studentId, active: true, bindingVersion: (bindingSnap.data()?.bindingVersion || 0) + 1 });
-    if (pointerSnap.exists) { tx.set(db.doc(`activeSessions/${digest(`${uid}:${GAME.gameId}`)}`), pointerSnap.data()); tx.delete(oldPointer); }
-    const result = { status: 'approved', classAlias: studentSnap.data().classAlias, globalParticipation: studentSnap.data().globalOptIn !== false };
+    tx.set(db.doc(`studentBindings/${uid}`), { classId, studentId, active: true, bindingVersion: (bindingSnap.data()?.bindingVersion || 0) + 1, pinVersion: studentSnap.data().pinVersion || 0 });
+    if (pointerSnap.exists && oldUid !== uid) { tx.set(db.doc(`activeSessions/${digest(`${uid}:${GAME.gameId}`)}`), pointerSnap.data()); tx.delete(oldPointer); }
+    const result = loginStatus(studentSnap.data());
     tx.create(op, { fingerprint, result }); return result;
   });
 });
@@ -355,12 +373,14 @@ export const detachStudentDevice = call(async (data, uid) => {
   await db.runTransaction(async tx => { const snap = await tx.get(bindingRef); if (snap.exists && snap.data().active) tx.update(bindingRef, { active: false }); });
   return { status: 'detached' };
 });
-export const requestJoin = call(async (data, uid) => {
-  fields(data, ['code', 'privateName', 'requestId']); requestId(data); await rateLimit(uid, 'join', 10, 3600000);
+export const requestJoin = call(async (data, uid, context = {}) => {
+  fields(data, ['code', 'privateName', 'pin', 'pinConfirm', 'requestId']); requestId(data); await loginRate(uid, context, 'register');
+  if (data.privateName !== undefined && typeof data.privateName !== 'string') fail('INVALID_NAME');
   const code = codeOf(data.code), privateName = nameOf(data.privateName), idx = db.doc(`joinCodes/${digest(code)}`);
   const pending = db.doc(`joinRequests/${uid}`);
   const result = await db.runTransaction(async tx => {
-    const [joined, old, codeSnap] = await Promise.all([tx.get(db.doc(`studentBindings/${uid}`)), tx.get(pending), tx.get(idx)]);
+    const [joined, old, codeSnap, teacherBinding] = await Promise.all([tx.get(db.doc(`studentBindings/${uid}`)), tx.get(pending), tx.get(idx), tx.get(db.doc(`teacherBindings/${uid}`))]);
+    if (teacherBinding.exists) fail('FORBIDDEN');
     if (!codeSnap.exists || !codeSnap.data().active || codeSnap.data().expiresAt <= now()) fail('JOIN_UNAVAILABLE');
     const classId = codeSnap.data().classId, classSnap = await tx.get(db.doc(`classes/${classId}`));
     if (!classSnap.exists || classSnap.data().status !== 'active' || !classSnap.data().joinEnabled || classSnap.data().codeVersion !== codeSnap.data().codeVersion) fail('JOIN_UNAVAILABLE');
@@ -368,7 +388,7 @@ export const requestJoin = call(async (data, uid) => {
       if (!joined.data().active || joined.data().classId !== classId) fail('FORBIDDEN');
       const member = await tx.get(studentRef(joined.data()));
       if (!member.exists || member.data().status !== 'active' || member.data().uid !== uid) fail('FORBIDDEN');
-      return { status: 'approved', classAlias: member.data().classAlias, privateName: member.data().privateName, checkMark: member.data().checkMark, globalParticipation: member.data().globalOptIn !== false };
+      return { ...loginStatus(member.data()), checkMark: member.data().checkMark };
     }
     if (old.exists) {
       if (old.data().classId !== classId) fail('FORBIDDEN');
@@ -376,9 +396,12 @@ export const requestJoin = call(async (data, uid) => {
       if (!snap.exists || snap.data().status !== 'pending' || snap.data().uid !== uid) fail('FORBIDDEN');
       return enrollPending(tx, uid, pending, old, sref, snap);
     }
+    if (!privateName) fail('INVALID_NAME');
+    pinPair(data);
     const studentId = randomId(), checkMark = String(randomBytes(1)[0] % 90 + 10), classAlias = aliasOf(studentId);
-    tx.create(db.doc(`classes/${classId}/students/${studentId}`), { uid, privateName, checkMark, classAlias, status: 'active', globalOptIn: true, createdAt: now(), joinedAt: now() });
-    tx.create(db.doc(`studentBindings/${uid}`), { classId, studentId, active: true, bindingVersion: 1 });
+    tx.create(db.doc(`classes/${classId}/students/${studentId}`), { uid, privateName, checkMark, classAlias, status: 'active', globalOptIn: true, pinReady: true, pinVersion: 1, createdAt: now(), joinedAt: now() });
+    tx.create(pinRef(classId, studentId), createPin(data.pin, `${classId}:${studentId}`, secret));
+    tx.create(db.doc(`studentBindings/${uid}`), { classId, studentId, active: true, bindingVersion: 1, pinVersion: 1 });
     return { status: 'approved', checkMark, classAlias, privateName, globalParticipation: true };
   });
   return result;
@@ -389,7 +412,7 @@ function enrollPending(tx, uid, pendingRef, pending, sref, snap) {
   tx.update(sref, { status: 'active', globalOptIn: true, joinedAt: now() });
   tx.create(db.doc(`studentBindings/${uid}`), { classId: p.classId, studentId: p.studentId, active: true, bindingVersion: 1 });
   tx.update(pendingRef, { status: 'joined' });
-  return { status: 'approved', classAlias: s.classAlias, privateName: s.privateName, checkMark: s.checkMark, globalParticipation: true };
+  return { status: 'pin-required', classAlias: s.classAlias, privateName: s.privateName, checkMark: s.checkMark, globalParticipation: true };
 }
 async function enrollLegacyPending(uid) {
   const bound = db.doc(`studentBindings/${uid}`), pendingRef = db.doc(`joinRequests/${uid}`);
@@ -405,8 +428,118 @@ async function enrollLegacyPending(uid) {
 }
 export const getStudentStatus = call(async (data, uid) => {
   fields(data, []); await enrollLegacyPending(uid); const s = await student(uid, true);
-  if (s) return { status: 'approved', classAlias: s.data.classAlias, privateName: s.data.privateName, globalParticipation: s.data.globalOptIn !== false };
+  if (s) return { status: s.data.pinReady && s.pinVersion === s.data.pinVersion ? 'approved' : 'pin-required', classAlias: s.data.classAlias, privateName: s.data.privateName, globalParticipation: s.data.globalOptIn !== false };
   return { status: 'new' };
+});
+
+const pinRef = (classId, studentId) => db.doc(`studentPins/${classId}:${studentId}`);
+function pinPair(data) { if (!validPin(data.pin) || data.pin !== data.pinConfirm) fail('INVALID_PIN'); }
+async function loginRate(uid, context, operation) {
+  await rateLimit(`network:${context.network || 'unknown'}`, `student-${operation}`, 60, 900000);
+  await rateLimit(uid, `student-${operation}`, 10, 900000);
+  if (operation === 'roster' || operation === 'register') await rateLimit('student-login-global', 'class-code', 300, 60000);
+}
+function loginStatus(s) { return { status: s.pinReady ? 'approved' : 'pin-required', privateName: s.privateName, classAlias: s.classAlias, globalParticipation: s.globalOptIn !== false }; }
+function deviceMoveBackup(tx, classId, studentId, before, uid, oldBinding, newBinding, pointer) {
+  tx.create(db.doc(`studentAdminBackups/${randomId()}`), { action: 'device-login', classId, studentId, before, oldBinding: oldBinding.data() || null, newBinding: newBinding.data() || null, activeSession: pointer.data() || null, changedBy: uid, createdAt: now() });
+}
+function rosterGrant(uid, classId, codeVersion) {
+  const payload = Buffer.from(JSON.stringify({ uid, classId, codeVersion, expires: Date.now() + 600000 })).toString('base64url');
+  return `${payload}.${digest(`roster:${payload}`)}`;
+}
+function readGrant(grant, uid) {
+  const [payload, signature] = str(grant, 1000).split('.');
+  const expected = Buffer.from(digest(`roster:${payload}`)), actual = Buffer.from(signature || '');
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) fail('LOGIN_FAILED');
+  let data; try { data = JSON.parse(Buffer.from(payload, 'base64url')); } catch { fail('LOGIN_FAILED'); }
+  if (data.uid !== uid || !Number.isFinite(data.expires) || data.expires <= Date.now()) fail('LOGIN_FAILED');
+  documentId(data.classId); return data;
+}
+export const getClassLoginRoster = call(async (data, uid, context = {}) => {
+  fields(data, ['code']); await loginRate(uid, context, 'roster');
+  // Shared across anonymous accounts, addresses and Worker instances. A
+  // conservative aggregate ceiling also bounds distributed code enumeration.
+  const code = codeOf(data.code), index = await db.doc(`joinCodes/${digest(code)}`).get();
+  if (!index.exists || !index.data().active || index.data().expiresAt <= now()) fail('JOIN_UNAVAILABLE');
+  const classId = index.data().classId, cls = await db.doc(`classes/${classId}`).get();
+  if (!cls.exists || cls.data().status !== 'active' || !cls.data().joinEnabled || cls.data().codeVersion !== index.data().codeVersion) fail('JOIN_UNAVAILABLE');
+  const rows = await db.doc(`classes/${classId}`).collection('students').where('status', '==', 'active').limit(200).get();
+  if (rows.size >= 200) fail('ROSTER_LIMIT');
+  const students = rows.docs.sort((a, b) => a.id.localeCompare(b.id)).map((doc, i) => ({ studentId: doc.id, privateName: doc.data().privateName || '이름 없음', classAlias: doc.data().classAlias, choiceNumber: i + 1, pinReady: doc.data().pinReady === true }));
+  return { grant: rosterGrant(uid, classId, cls.data().codeVersion), students };
+});
+export const setStudentPin = call(async (data, uid) => {
+  fields(data, ['pin', 'pinConfirm', 'requestId']); requestId(data); pinPair(data);
+  await rateLimit(uid, 'pin-setup', 10, 900000);
+  const binding = await student(uid, true); if (!binding) fail('FORBIDDEN');
+  const ref = studentRef(binding), credentialRef = pinRef(binding.classId, binding.studentId);
+  const op = opRef(uid, 'setStudentPin', data.requestId), fingerprint = digest(JSON.stringify([binding.classId, binding.studentId, data.pin]));
+  return db.runTransaction(async tx => {
+    const [snap, bound, credential, prior] = await Promise.all([tx.get(ref), tx.get(db.doc(`studentBindings/${uid}`)), tx.get(credentialRef), tx.get(op)]);
+    if (!snap.exists || snap.data().status !== 'active' || snap.data().uid !== uid || !bound.data()?.active) fail('FORBIDDEN');
+    const previous = checkOp(prior, fingerprint); if (previous) { if (bound.data().pinVersion !== snap.data().pinVersion || !snap.data().pinReady || !verifyPin(data.pin, credential.data(), `${binding.classId}:${binding.studentId}`, secret)) fail('FORBIDDEN'); return previous; }
+    // Only an existing authenticated legacy binding or a teacher return ticket
+    // grants this migration. An already configured PIN is never overwritten.
+    if (snap.data().pinReady === true || credential.data()?.enabled === true) fail('PIN_ALREADY_SET');
+    const version = (snap.data().pinVersion || 0) + 1;
+    tx.create(db.doc(`studentAdminBackups/${randomId()}`), { action: 'pin-migration', classId: binding.classId, studentId: binding.studentId, before: snap.data(), binding: bound.data(), credential: credential.data() || null, changedBy: uid, createdAt: now() });
+    tx.set(credentialRef, createPin(data.pin, `${binding.classId}:${binding.studentId}`, secret, version));
+    tx.update(ref, { pinReady: true, pinVersion: version });
+    tx.update(db.doc(`studentBindings/${uid}`), { pinVersion: version });
+    const result = loginStatus({ ...snap.data(), pinReady: true }); tx.create(op, { fingerprint, result }); return result;
+  });
+});
+export const loginStudentPin = call(async (data, uid, context = {}) => {
+  fields(data, ['grant', 'studentId', 'pin', 'requestId']); requestId(data);
+  await loginRate(uid, context, 'pin');
+  const grant = readGrant(data.grant, uid), sid = documentId(data.studentId), ref = db.doc(`classes/${grant.classId}/students/${sid}`), credentialRef = pinRef(grant.classId, sid);
+  // Count before checking the PIN, in an independent committed transaction:
+  // throwing from the authentication transaction cannot roll back the count.
+  await rateLimit(`student:${grant.classId}:${sid}`, 'pin', 6, 900000);
+  const op = opRef(uid, 'loginStudentPin', data.requestId), fingerprint = digest(JSON.stringify([grant.classId, sid, data.pin]));
+  const result = await db.runTransaction(async tx => {
+    const [snap, credential, cls, existing, prior, teacherBinding] = await Promise.all([tx.get(ref), tx.get(credentialRef), tx.get(db.doc(`classes/${grant.classId}`)), tx.get(db.doc(`studentBindings/${uid}`)), tx.get(op), tx.get(db.doc(`teacherBindings/${uid}`))]);
+    if (teacherBinding.exists || !cls.exists || cls.data().status !== 'active' || !cls.data().joinEnabled || cls.data().codeVersion !== grant.codeVersion || !snap.exists || snap.data().status !== 'active' || !snap.data().pinReady || !credential.exists || credential.data().version !== snap.data().pinVersion) fail('LOGIN_FAILED');
+    if (credential.data().locked || !verifyPin(data.pin, credential.data(), `${grant.classId}:${sid}`, secret)) {
+      const failedAttempts = Math.min(5, (credential.data().failedAttempts || 0) + 1);
+      tx.update(credentialRef, { failedAttempts, locked: failedAttempts >= 5 });
+      // Commit the failure counter before rejecting. Five consecutive failures
+      // require the teacher to change/reset the PIN, even after 15 minutes.
+      return { loginDenied: true };
+    }
+    const s = snap.data(), previous = checkOp(prior, fingerprint);
+    if (previous) { if (s.uid !== uid || !existing.data()?.active || existing.data().pinVersion !== s.pinVersion) fail('LOGIN_FAILED'); return previous; }
+    if (existing.exists && (existing.data().classId !== grant.classId || existing.data().studentId !== sid || existing.data().removed)) fail('FORBIDDEN');
+    const oldBinding = db.doc(`studentBindings/${s.uid}`), oldPointer = db.doc(`activeSessions/${digest(`${s.uid}:${GAME.gameId}`)}`), newPointer = db.doc(`activeSessions/${digest(`${uid}:${GAME.gameId}`)}`);
+    const [bound, pointer] = await Promise.all([tx.get(oldBinding), tx.get(oldPointer)]);
+    if (s.uid !== uid) deviceMoveBackup(tx, grant.classId, sid, s, uid, bound, existing, pointer);
+    if (s.uid !== uid) { if (bound.exists) tx.update(oldBinding, { active: false }); if (pointer.exists) { tx.set(newPointer, pointer.data()); tx.delete(oldPointer); } }
+    tx.update(ref, { uid });
+    tx.update(credentialRef, { failedAttempts: 0, locked: false });
+    tx.set(db.doc(`studentBindings/${uid}`), { classId: grant.classId, studentId: sid, active: true, bindingVersion: (bound.data()?.bindingVersion || 0) + 1, pinVersion: s.pinVersion });
+    const result = loginStatus(s); tx.create(op, { fingerprint, result }); return result;
+  });
+  if (result.loginDenied) fail('LOGIN_FAILED');
+  return result;
+});
+export const changeStudentPin = call(async (data, uid) => {
+  fields(data, ['classId', 'studentId', 'pin', 'pinConfirm', 'reset', 'requestId']); requestId(data);
+  if (data.reset !== true) pinPair(data);
+  else if (data.pin !== undefined || data.pinConfirm !== undefined) fail('INVALID_REQUEST');
+  const { ref } = await ownedClass(uid, data.classId), sid = documentId(data.studentId), memberRef = ref.collection('students').doc(sid), credentialRef = pinRef(data.classId, sid);
+  const op = opRef(uid, 'changeStudentPin', data.requestId), fingerprint = digest(JSON.stringify([data.classId, sid, data.reset === true, data.pin]));
+  return db.runTransaction(async tx => {
+    const [member, credential, prior] = await Promise.all([tx.get(memberRef), tx.get(credentialRef), tx.get(op)]);
+    const previous = checkOp(prior, fingerprint); if (previous) return previous;
+    if (!member.exists || member.data().status !== 'active') fail('NOT_FOUND');
+    const s = member.data(), boundRef = db.doc(`studentBindings/${s.uid}`), bound = await tx.get(boundRef), version = (s.pinVersion || 0) + 1;
+    tx.create(db.doc(`studentAdminBackups/${randomId()}`), { action: 'pin-change', classId: data.classId, studentId: sid, before: s, binding: bound.data() || null, credential: credential.data() || null, changedBy: uid, createdAt: now() });
+    tx.set(credentialRef, data.reset ? { enabled: false, version } : createPin(data.pin, `${data.classId}:${sid}`, secret, version));
+    tx.update(memberRef, { pinReady: !data.reset, pinVersion: version });
+    if (bound.exists) tx.update(boundRef, { active: false });
+    tx.delete(db.doc(`rateLimits/${digest(`student:${data.classId}:${sid}:pin`)}`));
+    const result = { studentId: sid, pinReady: !data.reset }; tx.create(op, { fingerprint, result }); return result;
+  });
 });
 
 export const startSession = call(async (data, uid) => {
@@ -416,7 +549,7 @@ export const startSession = call(async (data, uid) => {
   const op = opRef(uid, 'startSession', data.requestId), active = db.doc(`activeSessions/${digest(`${uid}:${GAME.gameId}`)}`);
   return db.runTransaction(async tx => {
     const [prior, pointer, classSnap, member] = await Promise.all([tx.get(op), tx.get(active), tx.get(db.doc(`classes/${binding.classId}`)), tx.get(studentRef(binding))]);
-    if (!member.exists || member.data().status !== 'active' || member.data().uid !== uid) fail('FORBIDDEN');
+    await assertStudentTx(tx, member, binding, uid);
     const previous = checkOp(prior, fingerprint);
     if (previous) {
       const saved = await tx.get(db.doc(`classes/${binding.classId}/sessions/${previous.sessionId}`));
@@ -468,7 +601,7 @@ export const submitAnswer = call(async (data, uid) => {
   const op = opRef(uid, 'submitAnswer', data.requestId), sref = db.doc(`classes/${binding.classId}/sessions/${sessionId}`);
   return db.runTransaction(async tx => {
     const [prior, snap, member] = await Promise.all([tx.get(op), tx.get(sref), tx.get(studentRef(binding))]);
-    if (!member.exists || member.data().status !== 'active' || member.data().uid !== uid) fail('FORBIDDEN');
+    await assertStudentTx(tx, member, binding, uid);
     const previous = checkOp(prior, fingerprint); if (previous) return previous;
     if (!snap.exists || snap.data().studentId !== binding.studentId || snap.data().status !== 'playing') fail('SESSION_NOT_ACTIVE');
     const s = unpackSession(snap.data()); if (s.expiresAt <= now()) fail('SESSION_EXPIRED');
@@ -512,7 +645,7 @@ export const finishSession = call(async (data, uid) => {
   const sref = db.doc(`classes/${binding.classId}/sessions/${sessionId}`), active = db.doc(`activeSessions/${digest(`${uid}:${GAME.gameId}`)}`);
   return db.runTransaction(async tx => {
     const [prior, snap, pointer, member] = await Promise.all([tx.get(op), tx.get(sref), tx.get(active), tx.get(studentRef(binding))]);
-    if (!member.exists || member.data().status !== 'active' || member.data().uid !== uid) fail('FORBIDDEN');
+    await assertStudentTx(tx, member, binding, uid);
     const previous = checkOp(prior, fingerprint); if (previous) return previous;
     if (!snap.exists || snap.data().studentId !== binding.studentId) fail('FORBIDDEN');
     const s = unpackSession(snap.data());
@@ -531,7 +664,7 @@ export const setGlobalParticipation = call(async (data, uid) => {
   const binding = await student(uid), sref = studentRef(binding), classRef = db.doc(`classes/${binding.classId}`);
   await db.runTransaction(async tx => {
     const [current, cls] = await Promise.all([tx.get(sref), tx.get(classRef)]);
-    if (!current.exists || current.data().status !== 'active') fail('FORBIDDEN');
+    await assertStudentTx(tx, current, binding, uid);
     const best = current.data().bestScores || {};
     const operations = [];
     for (const [key, score] of Object.entries(best)) {

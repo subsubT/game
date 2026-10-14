@@ -24,6 +24,7 @@ export class FirebaseGameService extends GameService {
       authSdk.connectAuthEmulator(this.auth, `http://${this.config.emulators.host || '127.0.0.1'}:${this.config.emulators.auth || 9099}`, { disableWarnings: true });
       if (functionsSdk) functionsSdk.connectFunctionsEmulator(this.functions, this.config.emulators.host || '127.0.0.1', this.config.emulators.functions || 5001);
     }
+    await this.auth.authStateReady();
     if (!this.auth.currentUser) await authSdk.signInAnonymously(this.auth);
     const status = await this.invoke('getStudentStatus', {});
     this.updateStatus(status);
@@ -36,6 +37,7 @@ export class FirebaseGameService extends GameService {
     this.memory.joined = status.status !== 'new'; this.memory.approved = status.status === 'approved';
     this.memory.classAlias = status.classAlias || ''; this.memory.checkMark = status.checkMark || '';
     this.memory.privateName = status.privateName || '';
+    this.memory.pinRequired = status.status === 'pin-required';
     if (status.globalParticipation !== undefined) this.memory.globalParticipation = status.globalParticipation;
     return status;
   }
@@ -70,12 +72,31 @@ export class FirebaseGameService extends GameService {
   }
   remember(session) { this.memory.session = session; if (session?.mode === 'regular') this.storage?.setItem(SESSION_KEY, session.sessionId); return session; }
   async refreshStatus() { return this.updateStatus(await this.call('getStudentStatus', {})); }
-  async joinClass(code, nickname = '') {
-    const result = await this.mutation('requestJoin', { code, privateName: nickname }, 'join');
+  async joinClass(code, nickname = '', pin, pinConfirm) {
+    // PINs must never enter the persisted offline mutation queue.
+    const result = await this.call('requestJoin', { code, privateName: nickname, pin, pinConfirm, requestId: crypto.randomUUID() });
+    this.updateStatus(result); return result;
+  }
+  async getLoginRoster(code) { return this.call('getClassLoginRoster', { code }); }
+  async loginPin(grant, studentId, pin) {
+    const result = await this.call('loginStudentPin', { grant, studentId, pin, requestId: crypto.randomUUID() });
+    this.storage?.removeItem(SESSION_KEY); this.storage?.removeItem(REQUEST_KEY);
+    this.pending = {}; this.memory.session = null;
+    this.pinSetupId = null;
+    this.updateStatus(result); return result;
+  }
+  async setPin(pin, pinConfirm) {
+    await this.ready;
+    // Retain only a non-secret request ID when a response is lost. A retry
+    // with a different PIN must not be reported as having saved that PIN.
+    this.pinSetupId ||= crypto.randomUUID();
+    const result = await this.invoke('setStudentPin', { pin, pinConfirm, requestId: this.pinSetupId });
+    this.pinSetupId = null;
     this.updateStatus(result); return result;
   }
   async redeemTicket(ticket) {
     const result = await this.mutation('redeemStudentReturnTicket', { ticket }, 'redeem-ticket');
+    this.pinSetupId = null;
     this.updateStatus(result); return result;
   }
   async startSession(gameId, { mode = 'regular', restart = false } = {}) {
@@ -117,11 +138,12 @@ export class FirebaseGameService extends GameService {
   }
   async switchStudent() {
     await this.ready;
-    if (this.memory.approved) await this.invoke('detachStudentDevice', {});
+    if (this.memory.joined) await this.invoke('detachStudentDevice', {});
     await this.authSdk.signOut(this.auth);
     this.storage?.removeItem(SESSION_KEY); this.storage?.removeItem(REQUEST_KEY);
     this.storage?.removeItem('1math3.mock.v1');
     this.pending = {}; this.memory = { joined: false, approved: false, globalParticipation: true, session: null, classAlias: '' };
+    this.pinSetupId = null;
     this.practice = new MockGameService(this.storage);
     await this.authSdk.signInAnonymously(this.auth);
   }

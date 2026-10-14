@@ -150,8 +150,9 @@ export class FirestoreRest {
   }
   commit(writes, transaction) { return this.request(`${this.base}:commit`, { method: 'POST', body: { writes, ...(transaction ? { transaction } : {}) } }); }
   async runTransaction(callback) {
+    let retryTransaction;
     for (let attempt = 0; attempt < 5; attempt++) {
-      const start = await this.request(`${this.base}:beginTransaction`, { method: 'POST', body: { options: { readWrite: {} } } });
+      const start = await this.request(`${this.base}:beginTransaction`, { method: 'POST', body: { options: { readWrite: retryTransaction ? { retryTransaction } : {} } } });
       const tx = new Transaction(this, start.transaction);
       try {
         const result = await callback(tx);
@@ -160,7 +161,13 @@ export class FirestoreRest {
         return result;
       } catch (error) {
         await this.request(`${this.base}:rollback`, { method: 'POST', body: { transaction: tx.id } }).catch(() => {});
-        if (error instanceof FirestoreError && error.code === 'ABORTED' && attempt < 4) continue;
+        if (error instanceof FirestoreError && error.code === 'ABORTED' && attempt < 4) {
+          retryTransaction = tx.id;
+          // Preserve retry priority and spread competing writers. Immediate
+          // fresh transactions can repeatedly deadlock on the same read locks.
+          await new Promise(resolve => setTimeout(resolve, (100 + Math.random() * 150) * 2 ** attempt));
+          continue;
+        }
         throw error;
       }
     }

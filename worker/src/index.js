@@ -93,7 +93,10 @@ export async function handleRequest(request, env, dependencies = {}) {
     stage = 'firestore-handler';
     const handlers = { ...createHandlers(db, env.MATH3_SERVER_SECRET), ...createSheetService(db, env, { ...dependencies, fetcher }).handlers };
     const handler = handlers[name];
-    const result = await handler(payload.data, uid, typeof verified === 'object' ? verified : {});
+    // Only the edge-supplied address is trusted. Ignore JSON, X-Forwarded-For
+    // and JWT claims as sources of rate-limit identity. Do not log addresses.
+    const context = { ...(typeof verified === 'object' ? verified : {}), network: request.headers.get('cf-connecting-ip') || 'unknown' };
+    const result = await handler(payload.data, uid, context);
     recordMetrics();
     return body({ result }, 200, cors);
   } catch (error) {

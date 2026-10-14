@@ -11,6 +11,7 @@ let body = source
   .replace(/^import \{ getFirestore \} from 'firebase-admin\/firestore';\r?\n/, '')
   .replace("from './lib/core.js'", "from '../../src/games/1math3/core.js'")
   .replace("from './lib/join-code.js'", "from '../../src/server/join-code.js'")
+  .replace("from './lib/student-pin.js'", "from '../../src/server/student-pin.js'")
   .replace(/initializeApp\(\);\r?\nconst db = getFirestore\(\);\r?\n/, '')
   .replace(/^const region = 'asia-northeast3';\r?\n/m, '')
   .replace(/^const secret = process\.env\.MATH3_SERVER_SECRET.*\r?\n/m, '')
@@ -40,13 +41,13 @@ if (!body.includes(oldCursor) || !body.includes(oldNext)) throw new Error('Leade
 body = body.replace(oldCursor, newCursor).replace(oldNext, newNext);
 // Imports belong at module scope; the Function body starts at the first shared constant.
 const imports = body.slice(0, body.indexOf('const aliasWords ='));
-const generated = `// Generated from functions/index.js by tools/build-worker.mjs. Do not edit directly.\nimport { ApiError } from './error.js';\n${imports}\nexport const handlerNames = Object.freeze(${JSON.stringify(names)});\nexport function createHandlers(db, secret) {\n  if (!secret) throw new Error('MATH3_SERVER_SECRET is required');\n${body.slice(body.indexOf('const aliasWords =')).replace(/^/gm, '  ')}\n  return { ${names.join(', ')} };\n}\n`;
+const generated = `// Generated from functions/index.js by tools/build-worker.mjs. Do not edit directly.\nimport { ApiError } from './error.js';\n${imports}\nexport const handlerNames = Object.freeze(${JSON.stringify(names)});\nexport function createHandlers(db, secret) {\n  if (!secret) throw new Error('MATH3_SERVER_SECRET is required');\n${body.slice(body.indexOf('const aliasWords =')).replace(/^/gm, '  ').replace(/^ +$/gm, '')}\n  return { ${names.join(', ')} };\n}\n`;
 const target = new URL('worker/src/generated-handlers.js', root);
 if (process.argv.includes('--check')) {
   const current = await readFile(target, 'utf8').catch(() => '');
   if (current !== generated) { console.error('Worker handlers are out of date. Run: npm run build:worker'); process.exitCode = 1; }
-  else console.log(`Worker handlers current (${names.length} CP3 methods).`);
+  else console.log(`Worker handlers current (${names.length} methods).`);
 } else {
   await writeFile(target, generated);
-  console.log(`Generated Worker handlers (${names.length} CP3 methods).`);
+  console.log(`Generated Worker handlers (${names.length} methods).`);
 }

@@ -1,3 +1,7 @@
+# 2026-10-14 개발 체크포인트
+
+**Checkpoint A PASS — 학생 PIN 로그인 구현·개발 검증 완료.** `codex/student-pin-checkpoint-a`에 보관하며 공개 서비스에는 아직 반영하지 않았다. [Checkpoint A 설계·검증·다음 작업](docs/CHECKPOINT_A_STUDENT_PIN.md)을 기준으로 이어간다. 게임 선택/자유 저장은 B, 전체 실제 검증과 main/공개 배포는 C에서 진행한다.
+
 # 수학 별 모으기 · 1math3
 
 2026-10-08: **Checkpoint 5 PASS — 전체 프로젝트 완료.** 실제 공개 학생·교사·Google OAuth/Sheets 전체 통합과 회귀 검증 완료.

@@ -23,6 +23,52 @@ const answerOf = q => {
   return 10 - q.operands[q.typeId === 'make_ten' ? 0 : 1];
 };
 
+test('real Firestore PIN transactions preserve legacy data, revoke races, protect credentials and recover after reset', {timeout:180000},async()=>{
+  const teacher='pin-teacher',student='pin-old',otherTeacher='pin-other-teacher';
+  await call(teacher,'createTeacherSpace',{requestId:id()});await call(otherTeacher,'createTeacherSpace',{requestId:id()});
+  const cls=await call(teacher,'createClass',{privateLabel:'PIN실트랜잭션',requestId:id()});
+  await call(student,'requestJoin',{code:cls.code,privateName:'검증학생',pin:'4826',pinConfirm:'4826',requestId:id()});
+  const sid=(await call(teacher,'listClassStudents',{classId:cls.classId})).students[0].studentId;
+  let session=await call(student,'startSession',{gameId:'1math3',mode:'regular',requestId:id()});
+  session=(await call(student,'submitAnswer',{sessionId:session.sessionId,questionId:session.questions[0].id,skip:true,expectedRevision:session.revision,requestId:id()})).session;
+  const path=`classes/${cls.classId}/sessions/${session.sessionId}`,ledger=(await db.doc(path).get()).data();
+  // Recreate the pre-PIN record shape without touching the learning ledger.
+  await db.runTransaction(async tx=>{
+    tx.update(db.doc(`classes/${cls.classId}/students/${sid}`),{pinReady:false,pinVersion:0});
+    tx.update(db.doc(`studentBindings/${student}`),{pinVersion:0});tx.delete(db.doc(`studentPins/${cls.classId}:${sid}`));
+  });
+  assert.equal((await call(student,'getStudentStatus')).status,'pin-required');
+  await assert.rejects(call('pin-stranger','setStudentPin',{pin:'4826',pinConfirm:'4826',requestId:id()}),/FORBIDDEN/);
+  await call(student,'setStudentPin',{pin:'4826',pinConfirm:'4826',requestId:id()});
+  const rosterA=await call('pin-device-a','getClassLoginRoster',{code:cls.code}),rosterB=await call('pin-device-b','getClassLoginRoster',{code:cls.code});
+  await assert.rejects(call('pin-device-a','loginStudentPin',{grant:rosterA.grant,studentId:sid,pin:'0000',requestId:id()}),/LOGIN_FAILED/);
+  await assert.rejects(call('pin-device-b','loginStudentPin',{grant:rosterA.grant,studentId:sid,pin:'4826',requestId:id()}),/LOGIN_FAILED/);
+  const logins=await Promise.all([call('pin-device-a','loginStudentPin',{grant:rosterA.grant,studentId:sid,pin:'4826',requestId:id()}),call('pin-device-b','loginStudentPin',{grant:rosterB.grant,studentId:sid,pin:'4826',requestId:id()})]);
+  assert.ok(logins.every(s=>s.status==='approved'));
+  const member=(await db.doc(`classes/${cls.classId}/students/${sid}`).get()).data(),winner=member.uid,loser=winner==='pin-device-a'?'pin-device-b':'pin-device-a';
+  assert.equal((await call(winner,'startSession',{gameId:'1math3',mode:'regular',requestId:id()})).sessionId,session.sessionId);
+  for(const uid of [student,loser])await assert.rejects(call(uid,'getSession',{sessionId:session.sessionId}));
+  assert.deepEqual((await db.doc(path).get()).data(),ledger);
+  const ticket=await call(teacher,'issueStudentReturnTicket',{classId:cls.classId,studentId:sid});
+  await assert.rejects(call(otherTeacher,'changeStudentPin',{classId:cls.classId,studentId:sid,reset:true,requestId:id()}),/FORBIDDEN/);
+  await call(teacher,'changeStudentPin',{classId:cls.classId,studentId:sid,reset:true,requestId:id()});
+  await assert.rejects(call(winner,'submitAnswer',{sessionId:session.sessionId,questionId:session.questions[1].id,skip:true,requestId:id()}));
+  await assert.rejects(call('pin-new','redeemStudentReturnTicket',{ticket:ticket.ticket,requestId:id()}),/FORBIDDEN/);
+  const newTicket=await call(teacher,'issueStudentReturnTicket',{classId:cls.classId,studentId:sid});
+  assert.equal((await call(winner,'redeemStudentReturnTicket',{ticket:newTicket.ticket,requestId:id()})).status,'pin-required');
+  await call(winner,'setStudentPin',{pin:'5702',pinConfirm:'5702',requestId:id()});
+  assert.equal((await call(winner,'startSession',{gameId:'1math3',mode:'regular',requestId:id()})).sessionId,session.sessionId);
+  const credential=(await db.doc(`studentPins/${cls.classId}:${sid}`).get()).data();assert.ok(credential.verifier);assert.equal('pin' in credential,false);
+  const rules=await initializeTestEnvironment({projectId,firestore:{host:'127.0.0.1',port:8080}});
+  try {
+    for(const uid of [winner,teacher,'outsider']) {
+      const client=rules.authenticatedContext(uid).firestore();
+      await assertFails(client.doc(`studentPins/${cls.classId}:${sid}`).get());
+      await assertFails(client.doc(`studentPins/${cls.classId}:${sid}`).set({pin:'0000'}));
+    }
+  } finally { await rules.cleanup(); }
+});
+
 test('Worker CP3 handlers preserve approval, server scoring, ranking, retries and Firestore denial', { timeout: 300000 }, async () => {
   const teacher = 'worker-teacher', student = 'worker-student', outsider = 'worker-outsider';
   const rules = await initializeTestEnvironment({ projectId, firestore: { host: '127.0.0.1', port: 8080 } });
@@ -31,7 +77,7 @@ test('Worker CP3 handlers preserve approval, server scoring, ranking, retries an
     assert.ok(space.recoveryKey);
     const cls = await call(teacher, 'createClass', { privateLabel: 'Worker반', requestId: id() });
     assert.match(cls.code, /^[0-9]{4}$/);
-    assert.equal((await call(student, 'requestJoin', { code: cls.code, privateName: '학생', requestId: id() })).status, 'approved');
+    assert.equal((await call(student, 'requestJoin', {pin:'4826',pinConfirm:'4826',code: cls.code, privateName: '학생', requestId: id() })).status, 'approved');
     await assert.rejects(call(outsider, 'listClassStudents', { classId: cls.classId }));
     assert.equal((await call(teacher, 'listPendingStudents', { classId: cls.classId })).students.length, 0);
     const startId = id();

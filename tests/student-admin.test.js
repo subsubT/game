@@ -9,25 +9,25 @@ const denied=(p,code)=>assert.rejects(p,e=>e.code===code);
 async function complete(h,uid){let s=await h.startSession({gameId:'1math3',mode:'regular',requestId:id()},uid);while(s.status==='playing')s=(await h.submitAnswer({sessionId:s.sessionId,questionId:s.questions[s.currentIndex].id,skip:true,expectedRevision:s.revision,requestId:id()},uid)).session;return s;}
 
 test('class code enrolls immediately; retries and concurrent requests do not rename or duplicate students',async()=>{
-  const {db,h,cls}=await fixture(),args={code:cls.code,privateName:'처음이름',requestId:id()};
+  const {db,h,cls}=await fixture(),args={pin:'4826',pinConfirm:'4826',code:cls.code,privateName:'처음이름',requestId:id()};
   const joined=await Promise.all([h.requestJoin(args,'student'),h.requestJoin(args,'student')]);assert.deepEqual(joined[0],joined[1]);assert.equal(joined[0].status,'approved');
   assert.equal((await h.listClassStudents({classId:cls.classId},'teacher')).students.length,1);assert.equal((await h.listPendingStudents({classId:cls.classId},'teacher')).students.length,0);
   assert.equal((await h.startSession({gameId:'1math3',mode:'regular',requestId:id()},'student')).status,'playing');
-  assert.equal((await h.requestJoin({...args,privateName:'학생변조',requestId:id()},'student')).privateName,'처음이름');
-  const other=await h.createClass({privateLabel:'다른반',requestId:id()},'other-teacher');await denied(h.requestJoin({code:other.code,requestId:id()},'student'),'FORBIDDEN');
-  db.rows.get(`classes/${cls.classId}`).joinEnabled=false;await denied(h.requestJoin({code:cls.code,requestId:id()},'new-student'),'JOIN_UNAVAILABLE');
+  assert.equal((await h.requestJoin({pin:'4826',pinConfirm:'4826',...args,privateName:'학생변조',requestId:id()},'student')).privateName,'처음이름');
+  const other=await h.createClass({privateLabel:'다른반',requestId:id()},'other-teacher');await denied(h.requestJoin({pin:'4826',pinConfirm:'4826',privateName:'검증학생',code:other.code,requestId:id()},'student'),'FORBIDDEN');
+  db.rows.get(`classes/${cls.classId}`).joinEnabled=false;await denied(h.requestJoin({pin:'4826',pinConfirm:'4826',privateName:'검증학생',code:cls.code,requestId:id()},'new-student'),'JOIN_UNAVAILABLE');
 });
 
 test('legacy pending enrollment activates once on status refresh and never restores a removed membership',async()=>{
   const {db,h,cls}=await fixture(),path=`classes/${cls.classId}/students/legacy`;
   db.rows.set(path,{uid:'legacy',privateName:'기존학생',classAlias:'초록별-11',checkMark:'22',status:'pending'});db.rows.set('joinRequests/legacy',{classId:cls.classId,studentId:'legacy',checkMark:'22'});
-  const result=await Promise.all([h.getStudentStatus({},'legacy'),h.getStudentStatus({},'legacy')]);assert.deepEqual(result[0],result[1]);assert.equal(result[0].status,'approved');assert.equal(result[0].privateName,'기존학생');
+  const result=await Promise.all([h.getStudentStatus({},'legacy'),h.getStudentStatus({},'legacy')]);assert.deepEqual(result[0],result[1]);assert.equal(result[0].status,'pin-required');assert.equal(result[0].privateName,'기존학생');
   assert.equal([...db.rows.values()].filter(v=>v.action==='enroll-pending').length,1);
-  await h.removeStudent({classId:cls.classId,studentId:'legacy',requestId:id()},'teacher');assert.equal((await h.getStudentStatus({},'legacy')).status,'new');await denied(h.requestJoin({code:cls.code,requestId:id()},'legacy'),'FORBIDDEN');
+  await h.removeStudent({classId:cls.classId,studentId:'legacy',requestId:id()},'teacher');assert.equal((await h.getStudentStatus({},'legacy')).status,'new');await denied(h.requestJoin({pin:'4826',pinConfirm:'4826',privateName:'검증학생',code:cls.code,requestId:id()},'legacy'),'FORBIDDEN');
 });
 
 test('teacher rename validates names, preserves ledger/aliases, is idempotent and rejects students and other teachers',async()=>{
-  const {db,h,cls}=await fixture();await h.requestJoin({code:cls.code,privateName:'원래이름',requestId:id()},'student');const sid=db.rows.get('studentBindings/student').studentId;
+  const {db,h,cls}=await fixture();await h.requestJoin({pin:'4826',pinConfirm:'4826',code:cls.code,privateName:'원래이름',requestId:id()},'student');const sid=db.rows.get('studentBindings/student').studentId;
   const path=`classes/${cls.classId}/students/${sid}`,before=structuredClone(db.rows.get(path)),args={classId:cls.classId,studentId:sid,privateName:'  바뀐이름  ',requestId:id()};
   await denied(h.renameStudent(args,'student'),'FORBIDDEN');await denied(h.renameStudent(args,'other-teacher'),'FORBIDDEN');
   for(const studentId of ['../../other/students/victim','..','a/b','a\\b']) { await denied(h.renameStudent({...args,studentId},'teacher'),'INVALID_REQUEST');await denied(h.removeStudent({classId:cls.classId,studentId,requestId:id()},'teacher'),'INVALID_REQUEST'); }
@@ -37,7 +37,7 @@ test('teacher rename validates names, preserves ledger/aliases, is idempotent an
 });
 
 test('removal revokes sessions and tickets, removes only this student from ranks and Sheets, preserves backup/ledger',async()=>{
-  const {db,h,cls}=await fixture();for(const uid of ['student','peer'])await h.requestJoin({code:cls.code,requestId:id()},uid);
+  const {db,h,cls}=await fixture();for(const uid of ['student','peer'])await h.requestJoin({pin:'4826',pinConfirm:'4826',privateName:'검증학생',code:cls.code,requestId:id()},uid);
   const s=await complete(h,'student');await complete(h,'peer');const sid=db.rows.get('studentBindings/student').studentId,path=`classes/${cls.classId}/sessions/${s.sessionId}`,ledger=structuredClone(db.rows.get(path));
   const active=await h.startSession({gameId:'1math3',mode:'regular',requestId:id()},'student');const ticket=await h.issueStudentReturnTicket({classId:cls.classId,studentId:sid},'teacher');
   const args={classId:cls.classId,studentId:sid,requestId:id()};await denied(h.removeStudent(args,'peer'),'FORBIDDEN');await denied(h.removeStudent(args,'other-teacher'),'FORBIDDEN');

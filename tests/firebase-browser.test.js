@@ -42,9 +42,14 @@ test('teacher approval and a full official round work in Chromium', { timeout: 2
 
     await s.goto(`${origin}/1math3.html`);
     await s.getByRole('button', { name: '학급 참여하기' }).click();
-    await s.getByLabel('학급 참여 코드').fill(code);
-    await s.getByRole('button', { name: '학급 참여하기' }).click();
-    await s.getByText('학급에 참여했어요.').waitFor();
+    await s.getByLabel('학급 코드', {exact:true}).fill(code);
+    await s.getByRole('button', { name: '우리 반 이름 보기' }).click();
+    await s.getByRole('button', { name: '처음 왔어요 · 새 이름 등록' }).click();
+    await s.getByLabel('내 이름', {exact:true}).fill('검증학생');
+    await s.getByLabel('숫자 4자리 비밀번호', {exact:true}).fill('4826');
+    await s.getByLabel('비밀번호 한 번 더').fill('4826');
+    await s.getByRole('button', { name: '등록하기', exact:true }).click();
+    await s.getByText('내 이름: 검증학생', {exact:true}).waitFor();
     await t.getByRole('button',{name:'새로고침'}).click();
     await t.getByRole('tab',{name:/학생 1/}).click();
     await t.getByRole('button',{name:'이름 변경',exact:true}).click();
