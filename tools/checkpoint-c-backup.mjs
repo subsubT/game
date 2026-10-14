@@ -30,7 +30,7 @@ async function main(){
   const canonical=x=>Array.isArray(x)?x.map(canonical):x&&typeof x==='object'?Object.fromEntries(Object.keys(x).sort().map(k=>[k,canonical(x[k])])):x;
   for(const [path,d] of Object.entries(before.documents)){
    // No existing class/student/session or connection is used as a mutable fixture.
-   if(synthetic.has(path.split('/')[1])||(!/^classes\/[^/]+(?:$|\/(students|sessions)\/)/.test(path)&&!path.startsWith('sheetConnections/')))continue;
+   if(synthetic.has(path.split('/')[1])||(!/^classes\/[^/]+(?:$|\/(students|sessions)\/)/.test(path)&&!path.startsWith('sheetConnections/')&&!path.startsWith('boardCounts/')&&!/^(classBoards|globalBoards)\//.test(path)))continue;
    const r=await api.get('/v1/'+d.name,{resolveOnHTTPError:true});
    if(r.status!==200||JSON.stringify(canonical(r.body.fields))!==JSON.stringify(canonical(d.fields)))throw Error('Original data changed');checked++;
   }
