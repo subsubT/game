@@ -1,10 +1,14 @@
 # 개발 상태 및 Checkpoint 인계
 
-## 2026-10-14 — Checkpoint C 통합 검증·배포 진행 중
+## 2026-10-14 — Checkpoint C PASS — 통합·실제 서비스 배포 완료
 
-B `992a3e1`에 A와 기존 main `2f8cd4e`가 모두 포함되어 있다. `codex/checkpoint-c-integration`에서 운영 3,231개 문서/Worker/설정/소스 백업을 확보하고, 기존 환경에 A+B Worker `182c68a9-7891-4890-881f-76de81a805c3`를 적용했다. 실제 Firebase/Worker 신규 PIN 등록·포털·첫 답 전 저장·다른 기기 복원·3문항 저장 실패/재시도·새로고침·50문항/500점/학급 순위, 기존 활성 기기의 PIN 전환과 답안 보존·동시 중복 저장·오래된 저장 충돌·타인 접근·교사 이름/PIN/reset/티켓/가상 소속 삭제·영구 오답 잠금을 검증했다. 실제 Google 관리표 생성과 중간 기록 제외도 확인했다. 원래 학급/학생/회차/Google 연결 161개 레코드 불변 비교 PASS. 기존 공개 게임 소스는 변경하지 않는다.
+A `7b89e2c`와 B `992a3e1`를 현재 main과 중복 없이 통합해 기존 Firebase `math3-dev` / Worker `math3-cp3-dev` / GitHub Pages에 반영했다. 신규 프로젝트/Secret/Rules/Google 설정 변경 없음. 운영 3,231개 문서와 복구 소스/Worker/설정을 비공개 백업했다. 기존 학생·완료 원장·연결·순위/점수 집계 242개 원본 필드 불변 PASS.
 
-main/Pages 게시와 공개 학생·교사·Google/기존 게임·Rules/Secret/런타임/도름스체크 최종 검증이 남아 있어 **아직 C 최종 PASS가 아니다**. [배포·복구와 검사 기록](CHECKPOINT_C_RELEASE.md).
+실제 Firebase/Worker와 실제 Pages에서 신규 PIN 등록 → 포털 → 첫 답 전 저장 → 응답 유실 재시도 → 로그아웃/다른 context PIN 로그인 → 숫자 복원 → 답변 유실 복구 → 3문항 임의 저장/전송 실패 재시도 → 새로고침/이어하기 → 50문항 500점/학급 순위 PASS. 기존 활성 기기 PIN 전환·원장 보존, 동시 중복 저장/오래된 revision 충돌/기기 폐기, 교사 이름/PIN/change/reset/티켓/가상 소속 삭제·PIN 오답 잠금, 무인증/토큰/Origin/grant/역할 우회와 타인 접근 거부 PASS. 공개 교사 50문항 완료 상세와 1문항 중간 저장 상세를 구분했다.
+
+실제 기존 Google 승인으로 가상 학급 관리표 생성·sync·반복 sync, 완료 2회/각500점/문항100행·고유100개·중간 회차/비공개 이름 제외·동일 파일/나에게만 공개 PASS. 낮은 교사 창에서 가려진 Google 버튼을 발견해 스크롤 가능한 메뉴로 수정·재배포하고 실제 마우스 동작을 재검증했다. 기존 공개 3게임·Firestore SDK 직접 거부·12파일 allowlist/Secret 제외·Worker 60초5xx/내부오류0 PASS. 도름스체크 확인29/미확인6/해당없음1, 위험실패0; 기존 Pages 헤더/정책 권고는 기록한다.
+
+기능 Pages run `38506049365`/commit `ddc64a4`, 교사 메뉴 보완 run `38506800880`/commit `cbc3459` 모두 success. Worker `182c68a9-7891-4890-881f-76de81a805c3`. 최종 문서 commit/push 후 동일 공개 파일을 다시 게시한다. 학생 https://subsubt.github.io/game/1math3.html · 교사 https://subsubt.github.io/game/teacher/ . [전체 근거·복구·남은 제한](CHECKPOINT_C_RELEASE.md).
 
 ## 2026-10-14 — Checkpoint B PASS (개발 검증) — 여기서 중단
 
