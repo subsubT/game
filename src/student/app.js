@@ -39,6 +39,7 @@ function render() {
   else if (ui.view === 'saved') root.innerHTML = savedView();
   else if (ui.view === 'saveError') root.innerHTML = saveErrorView();
   else if (ui.view === 'ranks') root.innerHTML = portalRanksView();
+  else if (ui.view === 'final') root.innerHTML = finalView();
   if (session?.status === 'playing' && ['playing','feedback','pairFeedback','pause'].includes(ui.view) && !root.querySelector('[data-action="save-now"]')) root.insertAdjacentHTML('beforeend', `<section class="panel save-controls"><p class="micro muted">확정한 답은 자동 저장해요. 쉬거나 나가기 전에 저장을 눌러 주세요.</p>${btn('저장하고 쉬기','save-now','button secondary')} ${btn('게임 선택으로','save-home','button light')}</section>`);
   document.querySelector('.topbar').inert = ui.view === 'skipConfirm' || ui.view === 'quitConfirm';
   document.querySelector('footer').inert = ui.view === 'skipConfirm' || ui.view === 'quitConfirm';
@@ -55,12 +56,12 @@ function homeView() {
   const joined = service.memory.approved;
   const rankText = live ? '서버에서 확정된 기록만 보여 줍니다.' : '모두 예시 별명과 예시 점수예요. 실제 학생 기록이 아니에요.';
   const settingText = live ? '설정은 서버에 저장돼요.' : '지금 설정은 모의예요.';
-  return `<section class="panel hero"><div class="hero-star" aria-hidden="true">🌟</div><div class="eyebrow">1학년 2학기 수학 · 2단원</div><h1>수학 별 모으기</h1>${joined && service.memory.privateName ? `<p class="micro">내 이름: ${esc(service.memory.privateName)}</p>` : ""}<p>덧셈과 뺄셈 문제를 풀고<br>별을 차곡차곡 모아 보아요.</p><div class="summary-grid"><div class="summary-item"><strong>50문항</strong>천천히 풀어요</div><div class="summary-item"><strong>5가지</strong>수학 놀이</div><div class="summary-item"><strong>쉬는 시간</strong>10문제마다 있어요</div></div><div class="actions">${btn('혼자 연습 시작하기', 'practice')} ${btn(joined ? '기록 도전 시작' : '학급 참여하기', joined ? 'record' : 'join', 'button secondary')}</div><p class="micro muted">시간 제한이 없어요. 연습 기록은 공식 순위에 올라가지 않아요.</p></section>
+  return `<section class="panel hero"><div class="hero-star" aria-hidden="true">🌟</div><div class="eyebrow">1학년 2학기 수학 · 2단원</div><h1>덧셈과 뺄셈(1)</h1>${joined && service.memory.privateName ? `<p class="micro">내 이름: ${esc(service.memory.privateName)}</p>` : ""}<p>덧셈과 뺄셈 문제를 풀고<br>별을 차곡차곡 모아 보아요.</p><div class="summary-grid"><div class="summary-item"><strong>50문항</strong>천천히 풀어요</div><div class="summary-item"><strong>5가지</strong>수학 놀이</div><div class="summary-item"><strong>쉬는 시간</strong>10문제마다 있어요</div></div><div class="actions">${btn('혼자 연습 시작하기', 'practice')} ${btn(joined ? '기록 도전 시작' : '학급 참여하기', joined ? 'record' : 'join', 'button secondary')}</div><p class="micro muted">기본 50문항은 시간 제한이 없어요. 최종 스테이지는 학급 기록 도전에서 10분 동안 풀어요. 연습 기록은 공식 순위에 올라가지 않아요.</p></section>
   <section class="panel"><div class="panel-title"><div><h2>친구들 순위</h2><p class="muted">${rankText}</p></div><span class="pill">전체 순위 기본 공개</span></div>${rankTabs()}<div id="rank-content">${rankContent()}</div><label class="toggle-label"><input type="checkbox" data-global-toggle ${service.memory.globalParticipation ? 'checked' : ''} ${live && !service.memory.approved ? 'disabled' : ''}><span>전체 순위에 내 최고 기록 등록 허용<br><span class="micro muted">현재 ${service.memory.globalParticipation ? '켜짐' : '꺼짐'} · 기본값은 켜짐. 꺼도 순위 조회는 할 수 있어요. ${settingText}</span></span></label><div class="notice micro">전체 순위에는 학급과 분리된 별명과 최고점만 보입니다.</div>${live ? `<div class="actions">${btn('학생 바꾸기', 'switch-student', 'button light')}</div>` : ''}</section>`;
 }
 function gameHubView() {
-  const games = live ? service.memory.games || [] : GAME_CATALOG.map(g => ({ ...g, activeSession: service.memory.session?.status === 'playing' ? service.memory.session : null }));
-  return `<section class="panel hero"><div class="hero-star" aria-hidden="true">🎮</div><h1>어떤 게임을 할까요?</h1><p class="micro">내 이름: ${esc(service.memory.privateName || service.memory.classAlias || '수학 친구')}</p><p>게임을 골라 보아요.<br>저장한 게임은 이어서 할 수 있어요.</p>${service.memory.gameLoadError ? `<p class="error" role="status">게임 목록을 확인하지 못했어요. 연결을 확인하고 다시 눌러 주세요.</p>${btn('게임 목록 다시 보기','hub-refresh','button secondary')}` : ''}<div class="game-catalog">${games.map(g => `<article class="game-tile"><div class="hero-star" aria-hidden="true">🌟</div><h2>${esc(g.title)}</h2><p>${esc(g.description)}</p>${g.activeSession ? `<p class="notice">${g.activeSession.currentIndex} / ${g.totalQuestions}문제 풀었어요.<br>${g.activeSession.progressState === 'paused' ? '저장한 게임이 있어요.' : '진행 중인 게임이 있어요.'}</p><button class="button" data-action="resume-game" data-game="${esc(g.gameId)}">이어서 하기</button>` : `<button class="button" data-action="select-game" data-game="${esc(g.gameId)}">게임 고르기</button>`}</article>`).join('')}</div><p class="error" role="status">${esc(ui.error)}</p><div class="actions">${btn('친구들 순위','hub-ranks','button secondary')} ${btn('로그아웃 · 학생 바꾸기','switch-student','button light')}</div></section>`;
+  const games = live ? service.memory.games || [] : GAME_CATALOG.map(g => ({ ...g, activeSession: g.gameId===GAME.gameId && service.memory.session?.status === 'playing' ? service.memory.session : null }));
+  return `<section class="panel hero"><div class="hero-star" aria-hidden="true">🎮</div><h1>어떤 게임을 할까요?</h1><p class="micro">내 이름: ${esc(service.memory.privateName || service.memory.classAlias || '수학 친구')}</p><p>게임을 골라 보아요.<br>저장한 게임은 이어서 할 수 있어요.</p>${service.memory.gameLoadError ? `<p class="error" role="status">게임 목록을 확인하지 못했어요. 연결을 확인하고 다시 눌러 주세요.</p>${btn('게임 목록 다시 보기','hub-refresh','button secondary')}` : ''}<div class="game-catalog">${games.map(g => `<article class="game-tile"><div class="hero-star" aria-hidden="true">🌟</div><h2>${esc(g.title)}</h2><p>${esc(g.description)}</p>${g.finalSession ? `<p class="notice">50문항 완료 · 최종 스테이지 ${g.finalSession.finalStage.status==='ready'?'도전 준비':g.finalSession.finalStage.status==='complete'?'완료 · 결과 보기':'이어하기'}</p>${btn('최종 스테이지','final-hub')}` : g.activeSession ? `<p class="notice">${g.activeSession.currentIndex} / ${g.totalQuestions}문제 풀었어요.<br>${g.activeSession.progressState === 'paused' ? '저장한 게임이 있어요.' : '진행 중인 게임이 있어요.'}</p><button class="button" data-action="resume-game" data-game="${esc(g.gameId)}">이어서 하기</button>` : `<button class="button" data-action="select-game" data-game="${esc(g.gameId)}">게임 고르기</button>`}</article>`).join('')}</div><p class="error" role="status">${esc(ui.error)}</p><div class="actions">${btn('친구들 순위','hub-ranks','button secondary')} ${btn('로그아웃 · 학생 바꾸기','switch-student','button light')}</div></section>`;
 }
 async function loadGames(discardConflicts = false) {
   if (!live || !service.memory.approved) return;
@@ -85,6 +86,42 @@ function restoreGame(s) {
   try { const local = JSON.parse(localStorage.getItem(`1math3.input.${s.sessionId}`) || 'null'); if (local?.revision === (s.revision ?? 0)) state = checkedProgressUI(s, local.state); } catch {}
   ui.view = state.view; ui.draft = state.draft; ui.selected = state.selected; ui.error = '';
 }
+let finalSnapshotAt = 0;
+function finalClock() {
+  const f=session?.finalStage;
+  return f?.status==='playing'?Math.max(0,f.remainingMs-(performance.now()-finalSnapshotAt)):f?.remainingMs||0;
+}
+function clockText(ms) {const n=Math.ceil(ms/1000);return `${Math.floor(n/60)}:${String(n%60).padStart(2,'0')}`;}
+function finalView() {
+  const f=session.finalStage;
+  if(!f)return '<section class="panel"><h1>최종 스테이지 기록이 없어요.</h1></section>';
+  const stats=`<div class="final-status"><strong>⏱ 남은 시간 <span id="final-clock" role="timer">${clockText(finalClock())}</span></strong><strong>⭐ 합계 ${(session.result?.score||0)+f.score}점 · 최종 ${f.correct}개 정답</strong></div>`;
+  let body='';
+  if(f.status==='ready')body=`<h1>최종 스테이지</h1><p>50문항을 마쳤어요! 이제 배운 내용을 골고루 풀어 보아요.</p><p>제한 시간은 10분이에요. 저장하고 쉬는 동안에는 시간이 멈춰요.<br>기본 점수에 최종 스테이지 점수를 더해 한 순위에 기록해요.</p>${btn('10분 도전 시작','final-start')}`;
+  else if(f.status==='paused')body=`<h1>최종 스테이지를 저장했어요!</h1><p>남은 시간과 답안을 보관했어요. 쉬는 동안 시간은 줄지 않아요.</p>${btn('남은 시간부터 이어하기','final-start')} ${btn('게임 선택으로','hub','button secondary')} ${btn('저장하고 로그아웃','saved-logout','button light')}`;
+  else if(f.status==='complete')body=`<h1>최종 스테이지 완료!</h1><p>10분 도전이 끝났어요.</p><p>정답 ${f.correct} · 오답 ${f.wrong}<br>기본 학습: ${session.result.score}점 / 500점<br>최종 스테이지: ${f.score}점<br>합산: ${session.result.score+f.score}점</p><p class="notice">기본 점수와 최종 점수를 합쳐 하나의 순위에 반영했어요.</p>${btn('학습 결과 보기','result')} ${btn('게임 선택으로','hub','button secondary')}`;
+  else if(ui.finalFeedback&&f.feedback)body=`<h1>${f.feedback.firstCorrect?'맞았어요! 별 하나!':'괜찮아요, 함께 확인해요.'}</h1><div class="problem">${esc(f.feedback.prompt)}</div><div class="feedback ${f.feedback.firstCorrect?'correct':'incorrect'}">정답은 ${f.feedback.answer}예요.<br>${esc(f.feedback.explanation)}</div>${btn('다음 문제','final-next')}`;
+  else {
+    const q=f.question,pair=q.step==='pair';
+    body=`<p class="pill">${f.index+1}번 · ${titleType(q.typeId)}</p><h1 class="problem">${esc(q.prompt)}</h1>${pair?`<p>10이 되는 카드 두 장을 골라요.</p><div class="card-row">${q.operands.map((n,i)=>`<button class="card-choice" data-action="final-card" data-index="${i}" aria-pressed="${ui.selected.includes(i)}">${n}</button>`).join('')}</div>${btn('고른 카드 확인','final-answer')}`:`${q.step==='sum'?`<p class="notice">${q.firstResponse?.pair?.correct?'좋은 짝이에요!':'10이 되는 카드 위치: '+q.validPairs.map(p=>p.map(i=>i+1).join('번, ')+'번').join(' 또는 ')} 이제 세 수의 합을 입력해요.</p>`:''}<div id="final-answer-display" class="number-display" aria-label="입력한 답">${esc(ui.draft||'□')}</div><div class="keypad">${['1','2','3','4','5','6','7','8','9','지우기','0','확인'].map(v=>`<button class="key" data-action="${v==='지우기'?'final-clear':v==='확인'?'final-answer':'final-digit'}" data-value="${v}">${v}</button>`).join('')}</div>`}`;
+  }
+  return `<section class="panel">${stats}${body}<p class="error" role="status">${esc(ui.error)}</p>${f.status==='playing'?`<p class="micro">쉬거나 나가기 전에 저장해 주세요. 저장을 확인할 때까지 시간은 계속 흘러요.</p>${btn('저장하고 쉬기','final-save','button secondary')}`:''}${ui.error?btn('서버 기록 다시 확인','final-refresh','button light'):''}</section>`;
+}
+async function finalWork(name,extra={}) {
+  ui.busy=true;
+  try {
+    const f=await service.finalRequest(name,session.sessionId,extra);session.finalStage=f;finalSnapshotAt=performance.now();ui.view='final';ui.error='';
+    if(name==='submitFinalAnswer') {ui.finalFeedback=Boolean(f.feedback&&f.feedback.questionId===extra.questionId);ui.draft='';ui.selected=[];}
+    if(name==='startFinalStage'&&f.uiState){ui.draft=f.uiState.draft;ui.selected=f.uiState.selected;ui.finalFeedback=f.uiState.view==='feedback';}
+  }catch(error){ui.error=['REVISION_CONFLICT','SESSION_PAUSED'].includes(error.message)?'다른 화면에서 기록이 바뀌었어요. 서버 기록을 다시 확인해 주세요.':'서버 응답을 확인하지 못했어요. 같은 요청을 다시 눌러 주세요. 확인할 때까지 시간은 흘러요.';}
+  finally{ui.busy=false;render();}
+}
+async function openFinal(s) {session=s;service.memory.session=s;ui.draft='';ui.selected=[];ui.finalFeedback=false;await finalWork('getFinalStage');}
+globalThis.setInterval?.(()=>{
+  if(ui.view!=='final'||session?.finalStage?.status!=='playing')return;
+  const clock=root.querySelector('#final-clock');if(clock)clock.textContent=clockText(finalClock());
+  if(!ui.busy&&(finalClock()===0||performance.now()-finalSnapshotAt>15000))finalWork('getFinalStage');
+},250);
 function savedView() { return `<section class="panel hero"><div class="hero-star">💾</div><h1>저장했어요!</h1><p>${session.currentIndex}문제까지 풀었어요.<br>${live && session.mode === 'regular' ? '다른 기기에서도 이어서 할 수 있어요.' : '연습은 이 기기에서만 이어서 할 수 있어요.'}</p><p class="notice">아직 끝난 게임은 아니에요. 점수와 순위는 끝까지 풀면 확정돼요.</p><div class="actions">${btn('이어서 하기','resume-saved')} ${btn('게임 선택으로','hub')} ${btn('저장하고 로그아웃','saved-logout','button light')}</div></section>`; }
 function saveErrorView() { return `<section class="panel"><h1>저장을 확인하지 못했어요</h1><p>입력한 내용은 이 기기에 보관했어요.<br>인터넷 연결을 확인하고 다시 눌러 주세요.<br>다른 기기에서는 서버가 확인한 기록까지만 보여요.</p><p class="error" role="status">${esc(ui.error)}</p><div class="actions">${btn('저장 다시 시도','save-retry')} ${btn('서버에 저장된 기록 불러오기','load-confirmed','button secondary')}</div></section>`; }
 async function saveGame(destination = 'saved') {
@@ -96,11 +133,11 @@ async function saveGame(destination = 'saved') {
   finally { ui.busy = false; render(); }
 }
 function rankTabs() { return `<div class="tabs" role="tablist" aria-label="순위 범위"><button class="tab" type="button" role="tab" aria-selected="${ui.tab === 'class'}" data-action="tab-class">우리 반 순위</button><button class="tab" type="button" role="tab" aria-selected="${ui.tab === 'global'}" data-action="tab-global">전체 순위</button></div>`; }
-function portalRanksView() { return `<section class="panel"><h1>친구들 순위</h1><p>끝까지 푼 게임의 최고점을 보여 줘요.</p>${rankTabs()}${rankContent()}<label class="toggle-label"><input type="checkbox" data-global-toggle ${service.memory.globalParticipation ? 'checked' : ''}><span>전체 순위에 내 최고 기록 등록 허용</span></label><div class="actions">${btn('게임 선택으로','hub','button light')}</div></section>`; }
+function portalRanksView() { return `<section class="panel"><h1>친구들 순위</h1><p>기본 학습과 완료한 최종 스테이지의 합산 최고점을 보여 줘요.</p>${rankTabs()}${rankContent()}<label class="toggle-label"><input type="checkbox" data-global-toggle ${service.memory.globalParticipation ? 'checked' : ''}><span>전체 순위에 내 최고 기록 등록 허용</span></label><div class="actions">${btn('게임 선택으로','hub','button light')}</div></section>`; }
 function rankContent() {
   if (!ui.board) return `<p class="muted">${esc(ui.boardError || '순위를 불러오는 중…')}</p>`;
   const season = ui.board.boardKey.split(':')[3] || currentSeason();
-  return `<p class="pill">1math3 · ${season} · ${live ? '확정 기록' : '예시 데이터'}</p><div>${ui.board.entries.length ? ui.board.entries.map(r => `<div class="rank-row ${r.isMe ? 'me' : ''}"><strong>${r.rank}위</strong><span>${esc(r.displayAlias)}${r.isMe ? ' (나)' : ''}</span><span>${r.score}점</span></div>`).join('') : '<p class="muted">아직 순위 기록이 없어요.</p>'}</div>`;
+  return `<p class="pill">덧셈과 뺄셈(1) · 통합 순위 · ${season} · ${live ? '확정 기록' : '예시 데이터'}</p><div>${ui.board.entries.length ? ui.board.entries.map(r => `<div class="rank-row ${r.isMe ? 'me' : ''}"><strong>${r.rank}위</strong><span>${esc(r.displayAlias)}${r.isMe ? ' (나)' : ''}</span><span>${r.score}점</span></div>`).join('') : '<p class="muted">아직 순위 기록이 없어요.</p>'}</div>`;
 }
 async function loadBoard() { try { ui.board = await service.getLeaderboard(ui.tab, ui.view === 'result' && session?.seasonId ? session.seasonId : currentSeason()); ui.boardError = ''; } catch { ui.board = null; ui.boardError = ui.tab === 'class' && !service.memory.approved ? '우리 반 순위는 학급 참여 후 볼 수 있어요.' : '순위를 불러오지 못했어요. 다시 눌러 주세요.'; } if (ui.view === 'home' || ui.view === 'result' || ui.view === 'ranks') render(); }
 
@@ -195,10 +232,10 @@ function confirmView() {
   return `<div class="modal-overlay"><section class="panel" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-description"><div class="eyebrow">확인해 주세요</div><h1 id="confirm-title">${skip ? '이 문제를 건너뛸까요?' : '게임을 그만할까요?'}</h1><p id="confirm-description">${skip ? '이 문제는 0점으로 기록되고 정답 풀이를 볼 수 있어요.' : '이 게임은 종료되어 이어서 할 수 없어요. 순위에는 들어가지 않아요. 나중에 이어서 하려면 계속 풀기를 누른 뒤 저장하고 쉬기를 골라 주세요.'}</p><p class="error" role="status">${esc(ui.error)}</p><div class="actions"><button type="button" class="button" data-action="${skip ? 'confirm-skip' : 'confirm-quit'}" autofocus>${skip ? '건너뛰기 확정' : '여기까지 기록하기'}</button>${btn('계속 풀기', 'cancel-confirm', 'button light')}</div></section></div>`;
 }
 function resultView() {
-  const s = summary(), complete = session.status === 'complete';
+  const s = summary(), complete = session.status === 'complete', finalDone=session.finalStage?.status==='complete';
   const official = live && session.mode === 'regular';
   const saveNotice = official ? `<strong>서버 저장 ${s.saveStatus === 'confirmed' ? '완료' : '확인 중'}</strong> · ${complete ? '50문항 완료' : '직접 종료한 미완료 회차'} · ${s.rankStatus === 'ready' ? '순위 반영 완료' : '순위 제외'}` : '<strong>연습용 모의 저장</strong> · 브라우저에 임시 보관했어요. 공식 순위에는 포함되지 않아요.';
-  return `<section class="panel"><div class="hero-star">${complete ? '🎉' : '🌱'}</div><div class="eyebrow">${complete ? '50문항을 끝까지 풀었어요!' : '이번 게임은 여기까지예요.'}</div><h1>${complete ? '참 잘했어요!' : '수고했어요!'}</h1><p class="problem">${s.score}점 <span style="font-size:24px">/ 500점</span></p><div class="stats"><div class="stat"><strong>⭐ ${s.stars}</strong>별</div><div class="stat"><strong>${s.correct}</strong>처음 정답</div><div class="stat"><strong>${s.wrong}</strong>처음 오답</div><div class="stat"><strong>${s.skipped}</strong>건너뜀</div><div class="stat"><strong>${s.unanswered}</strong>미응답</div></div><p class="notice warn">${saveNotice}</p><div class="actions">${btn('틀린 문제 복습', 'review', 'button secondary')} ${btn('다시 도전하기', 'retry')} ${btn('처음 화면', 'home', 'button light')}</div></section><section class="panel"><h2>순위 확인</h2><p class="muted">${official ? '서버 확정 기록의 최고점만 표시해요.' : '연습 기록은 순위에 반영되지 않아요.'}</p>${rankTabs()}<div>${rankContent()}</div><label class="toggle-label"><input type="checkbox" data-global-toggle ${service.memory.globalParticipation ? 'checked' : ''} ${live && !service.memory.approved ? 'disabled' : ''}><span>전체 순위에 내 최고 기록 등록 허용<br><span class="micro muted">현재 ${service.memory.globalParticipation ? '켜짐' : '꺼짐'} · 기본값은 켜짐. 꺼도 순위 조회는 할 수 있어요.</span></span></label></section>`;
+  return `<section class="panel"><div class="hero-star">${complete ? '🎉' : '🌱'}</div><div class="eyebrow">${complete ? '50문항을 끝까지 풀었어요!' : '이번 게임은 여기까지예요.'}</div><h1>${complete ? '참 잘했어요!' : '수고했어요!'}</h1><p class="problem">${finalDone?s.score+session.finalStage.score:s.score}점 <span style="font-size:24px">${finalDone?`기본 ${s.score} + 최종 ${session.finalStage.score}`:"/ 500점"}</span></p><div class="stats"><div class="stat"><strong>⭐ ${s.stars}</strong>별</div><div class="stat"><strong>${s.correct}</strong>처음 정답</div><div class="stat"><strong>${s.wrong}</strong>처음 오답</div><div class="stat"><strong>${s.skipped}</strong>건너뜀</div><div class="stat"><strong>${s.unanswered}</strong>미응답</div></div><p class="notice warn">${saveNotice}</p><div class="actions">${session.finalStage?btn('최종 스테이지','final-open'):''} ${btn('틀린 문제 복습', 'review', 'button secondary')} ${btn('다시 도전하기', 'retry')} ${btn('처음 화면', 'home', 'button light')}</div></section><section class="panel"><h2>순위 확인</h2><p class="muted">${official ? '서버 확정 기록의 최고점만 표시해요.' : '연습 기록은 순위에 반영되지 않아요.'}</p>${rankTabs()}<div>${rankContent()}</div><label class="toggle-label"><input type="checkbox" data-global-toggle ${service.memory.globalParticipation ? 'checked' : ''} ${live && !service.memory.approved ? 'disabled' : ''}><span>전체 순위에 내 최고 기록 등록 허용<br><span class="micro muted">현재 ${service.memory.globalParticipation ? '켜짐' : '꺼짐'} · 기본값은 켜짐. 꺼도 순위 조회는 할 수 있어요.</span></span></label></section>`;
 }
 function reviewView() {
   const wrong = session.questions.filter(q => q.status === 'answered' && !q.firstCorrect);
@@ -207,6 +244,26 @@ function reviewView() {
 root.addEventListener('click', async e => {
   const b = e.target.closest('[data-action]'); if (!b || ui.busy) return;
   const action = b.dataset.action;
+  if(action.startsWith('final-')) {
+    if(action==='final-open')await openFinal(session);
+    else if(action==='final-hub'){const game=service.memory.games.find(g=>g.gameId===GAME.gameId);await openFinal(game.finalSession);}
+    else if(action==='final-start')await finalWork('startFinalStage');
+    else if(action==='final-refresh'){await service.getGames(true);await finalWork('getFinalStage');}
+    else if(action==='final-next'){ui.finalFeedback=false;ui.draft='';ui.selected=[];render();}
+    else if(action==='final-digit'){ui.draft=(ui.draft+b.dataset.value).slice(0,2);render();}
+    else if(action==='final-clear'){ui.draft='';render();}
+    else if(action==='final-card'){const i=Number(b.dataset.index);ui.selected=ui.selected.includes(i)?ui.selected.filter(x=>x!==i):ui.selected.length<2?[...ui.selected,i]:ui.selected;render();}
+    else if(action==='final-answer') {
+      const q=session.finalStage.question;
+      if(q.step==='pair'&&ui.selected.length!==2){ui.error='카드 두 장을 골라 주세요.';render();return;}
+      if(q.step!=='pair'&&!/^\d{1,2}$/.test(ui.draft)){ui.error='0~19 사이 숫자로 입력해 주세요.';render();return;}
+      await finalWork('submitFinalAnswer',{questionId:q.id,response:q.step==='pair'?ui.selected:ui.draft});
+    } else if(action==='final-save') {
+      const f=session.finalStage;
+      await finalWork('saveFinalStage',{uiState:{view:ui.finalFeedback?'feedback':f.question.step==='sum'?'pairFeedback':'playing',questionId:ui.finalFeedback?f.feedback.id:f.question.id,draft:ui.finalFeedback||f.question.step==='pair'?'':ui.draft,selected:ui.finalFeedback||f.question.step!=='pair'?[]:ui.selected}});
+    }
+    return;
+  }
   if (action === 'hub-ranks') { ui.view = 'ranks'; ui.board = null; render(); await loadBoard(); return; }
   if (['select-game','resume-game','hub','hub-refresh','save-now','save-home','save-retry','resume-saved','saved-logout','load-confirmed'].includes(action)) {
     if (action === 'save-now' || action === 'save-home' || action === 'save-retry') { await saveGame(action === 'save-home' ? 'home' : action === 'save-retry' ? ui.saveDestination : 'saved'); return; }
@@ -265,7 +322,7 @@ root.addEventListener('click', async e => {
   else if (action === 'continue-sum') { ui.view = 'playing'; ui.draft = ''; render(); }
   else if (action === 'skip') { ui.view = 'skipConfirm'; render(); }
   else if (action === 'next-question') {
-    const q = session.questions[session.feedbackIndex ?? session.currentIndex - 1]; if (q?.index === 49) { ui.busy = true; try { await service.finishSession(session.sessionId, 'complete'); session = service.memory.session; ui.view = 'result'; } catch { ui.error = '결과 저장을 확인하지 못했어요. 다시 눌러 주세요.'; } finally { ui.busy = false; ui.board = null; render(); loadBoard(); } }
+    const q = session.questions[session.feedbackIndex ?? session.currentIndex - 1]; if (q?.index === 49) { ui.busy = true; try { await service.finishSession(session.sessionId, 'complete'); session = service.memory.session; if(session.finalStage) await openFinal(session); else ui.view = 'result'; } catch { ui.error = '결과 저장을 확인하지 못했어요. 다시 눌러 주세요.'; } finally { ui.busy = false; ui.board = null; render(); loadBoard(); } }
     else if (q && q.index % 10 === 9) { ui.view = 'pause'; render(); }
     else { ui.draft = ''; ui.error = ''; ui.view = 'playing'; render(); }
   }
@@ -296,6 +353,7 @@ async function submit(value) {
 
 document.addEventListener('keydown', e => {
   if (ui.busy) return;
+  if(ui.view==='final'&&session?.finalStage?.status==='playing'&&!ui.finalFeedback){if(/^\d$/.test(e.key)){e.preventDefault();ui.draft=(ui.draft+e.key).slice(0,2);render();}else if(e.key==='Backspace'){e.preventDefault();ui.draft=ui.draft.slice(0,-1);render();}else if(e.key==='Enter'){e.preventDefault();root.querySelector('[data-action="final-answer"]')?.click();}return;}
   if ((ui.view === 'skipConfirm' || ui.view === 'quitConfirm') && e.key === 'Escape') { e.preventDefault(); ui.view = 'playing'; render(); return; }
   if ((ui.view === 'skipConfirm' || ui.view === 'quitConfirm') && e.key === 'Tab') {
     const buttons = [...root.querySelectorAll('[role="alertdialog"] button:not([disabled])')], first = buttons[0], last = buttons.at(-1);

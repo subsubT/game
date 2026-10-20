@@ -71,6 +71,7 @@ export function buildSession(seed, versions = GAME) {
 }
 
 export function publicQuestion(item) {
+  if (item.finalPrompt) return { questionId:item.id, index:item.index, typeId:item.typeId, subtype:item.subtype, prompt:item.finalPrompt, operands:item.typeId==='make_ten_then_add'?[...item.operands]:[], visual:item.visual, answerMode:item.typeId==='make_ten_then_add'?'pair_then_number':'number', stepId:item.step };
   const [a, b, c] = item.operands;
   let operands = [...item.operands], prompt = '';
   if (item.typeId === 'make_ten') {
@@ -141,6 +142,7 @@ export function summarize(session) {
 }
 
 export function questionExplanation(q) {
+  if (q.finalExplanation) return q.finalExplanation;
   const [a, b, c] = q.operands;
   if (q.typeId === 'add_three_small') return `먼저 ${a}+${b}=${a + b}를 계산하고, ${c}를 더하면 ${q.answer}예요.`;
   if (q.typeId === 'subtract_three_small') return `${a}개에서 ${b}개를 빼면 ${a - b}개, 다시 ${c}개를 빼면 ${q.answer}개예요.`;

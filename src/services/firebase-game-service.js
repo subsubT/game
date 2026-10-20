@@ -46,7 +46,7 @@ export class FirebaseGameService extends GameService {
       const endpoint = new URL(`${this.config.workerApiOrigin.replace(/\/$/, '')}/api/${name}`);
       if (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(endpoint.hostname))) throw new Error('INVALID_WORKER_URL');
       const token = await this.auth.currentUser.getIdToken();
-      const response = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ data }) });
+      const response = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ data }), ...(['getFinalStage','startFinalStage','saveFinalStage','submitFinalAnswer'].includes(name)?{signal:AbortSignal.timeout(20000)}:{}) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error?.message || result.error?.code || 'NETWORK_UNAVAILABLE');
       return result.result;
@@ -58,7 +58,7 @@ export class FirebaseGameService extends GameService {
   async call(name, data) { await this.ready; return this.invoke(name, data); }
   async recoverPending(sessionId = null, discardConflicts = false) {
     for (const [key, entry] of Object.entries(this.pending)) {
-      const name = key.startsWith('answer:') || key.startsWith('skip:') ? 'submitAnswer' : key.startsWith('save:') ? 'saveSession' : key.startsWith('resume:') ? 'resumeSession' : null;
+      const name = key.startsWith('final:') ? key.split(':')[1] : key.startsWith('answer:') || key.startsWith('skip:') ? 'submitAnswer' : key.startsWith('save:') ? 'saveSession' : key.startsWith('resume:') ? 'resumeSession' : null;
       if (!name) continue;
       const data = JSON.parse(entry.body); if (sessionId && data.sessionId !== sessionId) continue;
       let result;
@@ -72,13 +72,19 @@ export class FirebaseGameService extends GameService {
     }
   }
   async refreshGamesInternal() {
-    const result = await this.invoke('getStudentGames', {}); this.memory.games = result.games; this.memory.gameLoadError = false;
+    const result = await this.invoke('getStudentGames', {catalogVersion:2}); this.memory.games = result.games; this.memory.gameLoadError = false;
     const active = result.games.find(g => g.gameId === GAME.gameId)?.activeSession;
     this.memory.regularSession = active || null;
     if (active) this.remember(active);
     return result;
   }
   async getGames(discardConflicts = false) { await this.ready; await this.recoverPending(null, discardConflicts); return this.refreshGamesInternal(); }
+  async finalRequest(name, sessionId, extra = {}) {
+    await this.ready;
+    const result = name === 'getFinalStage' ? await this.invoke(name,{sessionId}) : await this.mutation(name,{sessionId,expectedRevision:this.memory.session.finalStage.revision,...extra},`final:${name}:${sessionId}:${extra.questionId||''}`);
+    if(this.memory.session?.sessionId===sessionId){this.memory.session.finalStage=result.finalStage;const r=this.memory.session.result;if(r)r.totalScore=r.score+(result.finalStage.status==='complete'?result.finalStage.score:0);}
+    return result.finalStage;
+  }
   async mutation(name, data, key) {
     await this.ready;
     const body = JSON.stringify(data), old = this.pending[key];

@@ -14,6 +14,7 @@ let body = source
   .replace("from './lib/student-pin.js'", "from '../../src/server/student-pin.js'")
   .replace("from './lib/catalog.js'", "from '../../src/games/catalog.js'")
   .replace("from './lib/session-progress.js'", "from '../../src/games/session-progress.js'")
+  .replace("from './lib/final-stage.js'", "from '../../src/games/1math3/final-stage.js'")
   .replace(/initializeApp\(\);\r?\nconst db = getFirestore\(\);\r?\n/, '')
   .replace(/^const region = 'asia-northeast3';\r?\n/m, '')
   .replace(/^const secret = process\.env\.MATH3_SERVER_SECRET.*\r?\n/m, '')
@@ -28,7 +29,7 @@ if (body.includes('HttpsError') || body.includes('onCall(') || body.includes('ge
 body = body.replace(/\r\n/g, '\n');
 const oldCursor = `  if (data.cursor) {
     const [scoreText, id, signature] = str(data.cursor, 250).split('.');
-    if (signature !== digest(\`\${boardId}:\${scoreText}:\${id}\`).slice(0, 16) || !/^\\d{1,3}$/.test(scoreText) || !/^[a-f0-9]{32}$/.test(id)) fail('INVALID_REQUEST');
+    if (signature !== digest(\`\${boardId}:\${scoreText}:\${id}\`).slice(0, 16) || !/^\\d{1,8}$/.test(scoreText) || !/^[a-f0-9]{32}$/.test(id)) fail('INVALID_REQUEST');
     query = query.startAfter(Number(scoreText), id);
   }`;
 const newCursor = `  if (data.cursor) {
@@ -43,7 +44,7 @@ if (!body.includes(oldCursor) || !body.includes(oldNext)) throw new Error('Leade
 body = body.replace(oldCursor, newCursor).replace(oldNext, newNext);
 // Imports belong at module scope; the Function body starts at the first shared constant.
 const imports = body.slice(0, body.indexOf('const aliasWords ='));
-const generated = `// Generated from functions/index.js by tools/build-worker.mjs. Do not edit directly.\nimport { ApiError } from './error.js';\n${imports}\nexport const handlerNames = Object.freeze(${JSON.stringify(names)});\nexport function createHandlers(db, secret) {\n  if (!secret) throw new Error('MATH3_SERVER_SECRET is required');\n${body.slice(body.indexOf('const aliasWords =')).replace(/^/gm, '  ').replace(/^ +$/gm, '')}\n  return { ${names.join(', ')} };\n}\n`;
+const generated = `// Generated from functions/index.js by tools/build-worker.mjs. Do not edit directly.\nimport { ApiError } from './error.js';\n${imports}\nexport const handlerNames = Object.freeze(${JSON.stringify(names)});\nexport function createHandlers(db, secret) {\n  if (!secret) throw new Error('MATH3_SERVER_SECRET is required');\n${body.slice(body.indexOf('const aliasWords =')).replace(/^/gm, '  ').replace(/^ +$/gm, '')}\n  return { ${names.join(', ')}, finalizeOfflineStage };\n}\n`;
 const target = new URL('worker/src/generated-handlers.js', root);
 if (process.argv.includes('--check')) {
   const current = await readFile(target, 'utf8').catch(() => '');

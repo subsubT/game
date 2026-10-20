@@ -5,6 +5,7 @@ import { FirestoreRest } from '../worker/src/firestore-rest.js';
 import { handleRequest } from '../worker/src/index.js';
 import { createSheetService } from '../worker/src/sheets.js';
 import { FakeGoogle, fixtureEnv } from './sheets-fakes.js';
+import {unpackFinal} from '../src/games/1math3/final-stage.js';
 
 const projectId = 'demo-1math3-checkpoint3';
 const db = new FirestoreRest(projectId, 'owner', fetch, 'http://127.0.0.1:8080/v1');
@@ -179,4 +180,18 @@ test('Worker CP3 handlers preserve approval, server scoring, ranking, retries an
     await assert.rejects(call(teacher, 'listClasses'));
     await assert.rejects(call('worker-replay', 'recoverTeacherSpace', { recoveryKey: space.recoveryKey, requestId: id() }));
   } finally { await rules.cleanup(); }
+});
+
+test('real Firestore final stage nested card data, duplicate save, cross-device clock, expiry and combined ranking',{timeout:180000},async()=>{
+ const t='final-teacher',u='final-student';await call(t,'createTeacherSpace',{requestId:id()});const cls=await call(t,'createClass',{privateLabel:'최종실검사',requestId:id()});await call(u,'requestJoin',{code:cls.code,privateName:'가상 최종',pin:'4826',pinConfirm:'4826',requestId:id()});
+ let s=await call(u,'startSession',{gameId:'1math3',mode:'regular',requestId:id()});
+ for(let n=0;n<50;n++){let q=s.questions[s.currentIndex];if(q.step==='pair'){const pair=[[0,1],[0,2],[1,2]].find(([a,b])=>q.operands[a]+q.operands[b]===10);s=(await call(u,'submitAnswer',{sessionId:s.sessionId,questionId:q.id,response:pair,expectedRevision:s.revision,requestId:id()})).session;q=s.questions[s.currentIndex];}s=(await call(u,'submitAnswer',{sessionId:s.sessionId,questionId:q.id,response:answerOf(q),expectedRevision:s.revision,requestId:id()})).session;}
+ const ref=db.doc('classes/'+cls.classId+'/sessions/'+s.sessionId);let f=(await call(u,'startFinalStage',{sessionId:s.sessionId,expectedRevision:0,requestId:id()})).finalStage;
+ for(let n=0;n<10;n++){let q=unpackFinal((await ref.get()).data().finalStage).question;if(q.step==='pair'){f=(await call(u,'submitFinalAnswer',{sessionId:s.sessionId,questionId:q.id,response:q.validPairs[0],expectedRevision:f.revision,requestId:id()})).finalStage;q=unpackFinal((await ref.get()).data().finalStage).question;}f=(await call(u,'submitFinalAnswer',{sessionId:s.sessionId,questionId:q.id,response:q.answer,expectedRevision:f.revision,requestId:id()})).finalStage;}
+ const uiState={view:'playing',questionId:f.question.id,draft:f.question.step==='pair'?'':'1',selected:[]},args={sessionId:s.sessionId,expectedRevision:f.revision,uiState,requestId:id()};const saves=await Promise.all([call(u,'saveFinalStage',args),call(u,'saveFinalStage',args)]);assert.deepEqual(saves[0],saves[1]);f=saves[0].finalStage;assert.equal(f.score,100);assert.ok(f.remainingMs<600000);
+ const roster=await call('final-other-device','getClassLoginRoster',{code:cls.code});await call('final-other-device','loginStudentPin',{grant:roster.grant,studentId:roster.students[0].studentId,pin:'4826',requestId:id()});await assert.rejects(call(u,'getFinalStage',{sessionId:s.sessionId}),/PENDING_APPROVAL/);
+ f=(await call('final-other-device','startFinalStage',{sessionId:s.sessionId,expectedRevision:f.revision,requestId:id()})).finalStage;
+ await db.runTransaction(async tx=>{const snap=await tx.get(ref),saved=snap.data().finalStage;tx.update(ref,{finalStage:{...saved,runningSince:saved.runningSince-600001}});});
+ f=(await call('final-other-device','getFinalStage',{sessionId:s.sessionId})).finalStage;assert.equal(f.status,'complete');assert.equal(f.score,100);assert.equal((await call(t,'getTeacherLeaderboard',{classId:cls.classId,seasonId:s.seasonId})).entries[0].score,600);
+ const details=await call(t,'getSessionDetails',{classId:cls.classId,sessionId:s.sessionId});assert.equal(details.result.score,600);assert.equal(details.finalAnswers.length,10);
 });

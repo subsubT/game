@@ -6,9 +6,10 @@ import { generateJoinCode } from '../../src/server/join-code.js';
 import { validPin, createPin, verifyPin } from '../../src/server/student-pin.js';
 import { GAME_CATALOG } from '../../src/games/catalog.js';
 import { defaultProgressUI, checkedProgressUI } from '../../src/games/session-progress.js';
+import { FINAL_DURATION_MS, FINAL_VERSION, finalQuestion, finalRemaining, packFinal, unpackFinal } from '../../src/games/1math3/final-stage.js';
 
 
-export const handlerNames = Object.freeze(["createTeacherSpace","recoverTeacherSpace","createClass","ensureClassJoinCode","listClasses","listPendingStudents","listClassSessions","getSessionDetails","setClassGlobalParticipation","approveStudent","listClassStudents","renameStudent","removeStudent","getTeacherLeaderboard","issueStudentReturnTicket","redeemStudentReturnTicket","detachStudentDevice","requestJoin","getStudentStatus","getClassLoginRoster","setStudentPin","loginStudentPin","changeStudentPin","getStudentGames","saveSession","resumeSession","startSession","getSession","submitAnswer","finishSession","setGlobalParticipation","getLeaderboard"]);
+export const handlerNames = Object.freeze(["getFinalStage","startFinalStage","saveFinalStage","submitFinalAnswer","createTeacherSpace","recoverTeacherSpace","createClass","ensureClassJoinCode","listClasses","listPendingStudents","listClassSessions","getSessionDetails","setClassGlobalParticipation","approveStudent","listClassStudents","renameStudent","removeStudent","getTeacherLeaderboard","issueStudentReturnTicket","redeemStudentReturnTicket","detachStudentDevice","requestJoin","getStudentStatus","getClassLoginRoster","setStudentPin","loginStudentPin","changeStudentPin","getStudentGames","saveSession","resumeSession","startSession","getSession","submitAnswer","finishSession","setGlobalParticipation","getLeaderboard"]);
 export function createHandlers(db, secret) {
   if (!secret) throw new Error('MATH3_SERVER_SECRET is required');
   const aliasWords = ['초록별', '노란달', '푸른별', '반짝꽃', '은하수', '새싹별', '달빛곰', '구름별'];
@@ -95,9 +96,103 @@ export function createHandlers(db, secret) {
   function safeSession(s) {
     s = unpackSession(s);
     const questions = s.questions.map((q, i) => i < s.currentIndex || q.status === 'answered' ? safeQuestion(q, true) : i === s.currentIndex ? safeQuestion(q) : { index: i });
-    const result = s.status === 'playing' ? null : { ...summarize(s), seasonId: s.seasonId, saveStatus: 'confirmed', rankStatus: s.status === 'complete' && s.mode === 'regular' ? 'ready' : 'excluded' };
-    return { sessionId: s.sessionId, gameId: s.gameId, versions: s.versions, seasonId: s.seasonId, mode: s.mode, status: s.status, currentIndex: s.currentIndex, revision: s.revision, feedbackIndex: s.feedbackIndex, startedAt: s.startedAt, expiresAt: s.expiresAt, progressState: s.progressState || 'running', savedAt: s.savedAt || null, uiState: s.uiState || null, timer: { policy: 'unlimited', remainingMs: null }, questions, result };
+    const result = s.status === 'playing' ? null : { ...summarize(s), totalScore:rankingScore(s), seasonId: s.seasonId, saveStatus: 'confirmed', rankStatus: s.status === 'complete' && s.mode === 'regular' ? 'ready' : 'excluded' };
+    return { sessionId: s.sessionId, gameId: s.gameId, versions: s.versions, seasonId: s.seasonId, mode: s.mode, status: s.status, currentIndex: s.currentIndex, revision: s.revision, feedbackIndex: s.feedbackIndex, startedAt: s.startedAt, expiresAt: s.expiresAt, progressState: s.progressState || 'running', savedAt: s.savedAt || null, uiState: s.uiState || null, timer: { policy: 'unlimited', remainingMs: null }, questions, result, finalStage: safeFinal(s.finalStage) };
   }
+  function safeFinal(f) {
+    if (!f) return null;
+    f=unpackFinal(f);
+    return { version:f.version,status:f.status,revision:f.revision,remainingMs:finalRemaining(f),deadlineAt:f.status==='playing'?f.runningSince+f.remainingMs:null,score:f.score||0,correct:f.correct||0,wrong:f.wrong||0,skipped:f.skipped||0,index:f.index||0,uiState:f.uiState||null,question:f.question?safeQuestion(f.question):null,feedback:f.feedback?safeQuestion(f.feedback,true):null,startedAt:f.startedAt||null,finishedAt:f.finishedAt||null };
+  }
+  function rankingScore(s) {return summarize(unpackSession(s)).score+(s.finalStage?.status==='complete'?(s.finalStage.score||0):0);}
+  async function readFinalProjection(tx,s) {
+    const memberRef=db.doc(`classes/${s.classId}/students/${s.studentId}`);
+    const [member,cls,refs]=await Promise.all([tx.get(memberRef),tx.get(db.doc(`classes/${s.classId}`)),rankRefs(tx,s.classId,s.studentId,boardOf(s.seasonId))]);
+    return ()=>{if(member.data()?.status==='active'&&cls.data()?.status==='active')projectRank(tx,refs,unpackSession(s),member.data(),cls.data(),memberRef);};
+  }
+  async function finalizeOfflineStage(classId,sid) {
+    const ref=db.doc(`classes/${classId}/sessions/${sid}`),timerRef=db.doc(`activeFinalStages/${sid}`);
+    return db.runTransaction(async tx=>{
+      const [snap,timer,exp]=await Promise.all([tx.get(ref),tx.get(timerRef),tx.get(db.doc(`sheetExports/${classId}`))]);
+      const s=snap.data(),f=unpackFinal(s?.finalStage);
+      if(!timer.exists)return;
+      if(!f||f.status!=='playing'){tx.delete(timerRef);return;}
+      if(finalRemaining(f)>0)return;
+      f.finishedAt=new Date(f.runningSince+f.remainingMs).toISOString();Object.assign(f,{status:'complete',remainingMs:0,runningSince:null,revision:f.revision+1,uiState:null});
+      s.finalStage=f;
+      const project=await readFinalProjection(tx,s);
+      tx.update(ref,{finalStage:packFinal(f)});tx.delete(timerRef);project();
+      if(exp.data()?.spreadsheetId)tx.set(db.doc(`sheetJobs/${classId}`),{state:'pending',dirty:`final:${sid}:${f.revision}`,nextRunAt:0});
+    });
+  }
+  // Reads and writes serialize on the same session as PIN membership checks.
+  // The server clock is charged before any answer, pause, resume or timeout check.
+  async function finalAction(data,uid,action) {
+    fields(data, action==='get'?['sessionId']:action==='answer'?['sessionId','questionId','response','expectedRevision','requestId']:action==='save'?['sessionId','uiState','expectedRevision','requestId']:['sessionId','expectedRevision','requestId']);
+    const binding=await student(uid), sid=documentId(data.sessionId), ref=db.doc(`classes/${binding.classId}/sessions/${sid}`);
+    const mutation=action!=='get';
+    if(mutation) { requestId(data);if(!Number.isInteger(data.expectedRevision)||data.expectedRevision<0)fail('INVALID_REQUEST'); }
+    const op=mutation?opRef(uid,`final-${action}`,data.requestId):null;
+    const fingerprint=hash(JSON.stringify([sid,data.questionId,data.response,data.uiState]));
+    return db.runTransaction(async tx=>{
+      const [snap,member,prior,exportSnap]=await Promise.all([tx.get(ref),tx.get(studentRef(binding)),op?tx.get(op):null,tx.get(db.doc(`sheetExports/${binding.classId}`))]);
+      await assertStudentTx(tx,member,binding,uid);
+      if(!snap.exists||snap.data().studentId!==binding.studentId)fail('FORBIDDEN');
+      const s=snap.data(); if(s.status!=='complete'||!s.finalStage)fail('FINAL_NOT_AVAILABLE');
+      const f=unpackFinal(s.finalStage), time=Date.now();
+      const old=prior?checkOp(prior,fingerprint):null;
+      // Retry acknowledges the operation but always returns today's clock/state.
+      if(old) return { ...old,finalStage:safeFinal(f) };
+      if(mutation&&data.expectedRevision!==f.revision)fail('REVISION_CONFLICT');
+      let changed=false,accepted=false;
+      if(f.status==='playing') {
+        const deadline=f.runningSince+f.remainingMs;
+        f.remainingMs=finalRemaining(f,time);f.runningSince=time;
+        if(f.remainingMs===0) {f.status='complete';f.finishedAt=new Date(deadline).toISOString();f.runningSince=null;f.revision++;f.uiState=null;changed=true;}
+      }
+      if(action==='start'&&f.status!=='complete') {
+        if(!['ready','paused','playing'].includes(f.status))fail('FINAL_NOT_AVAILABLE');
+        if(f.status==='ready') Object.assign(f,{seed:randomBytes(4).readUInt32BE(),index:0,question:null,startedAt:new Date(time).toISOString()});
+        if(!f.question)f.question=finalQuestion(f.seed,f.index);
+        if(f.status!=='playing'){f.status='playing';f.runningSince=time;f.revision++;changed=true;}
+      } else if(action==='save'&&f.status!=='complete') {
+        if(f.status!=='playing')fail('SESSION_PAUSED');
+        try {f.uiState=checkedProgressUI({questions:[f.question,f.feedback],currentIndex:0,feedbackIndex:1},data.uiState);}catch{fail('INVALID_PROGRESS');}
+        f.status='paused';f.runningSince=null;f.revision++;changed=true;
+      } else if(action==='answer'&&f.status!=='complete') {
+        if(f.status!=='playing')fail('SESSION_PAUSED');
+        const q=f.question;if(data.questionId!==q.id)fail('REVISION_CONFLICT');
+        const response=evaluateStep(q,data.response);if(!response.accepted)fail(response.reason);
+        accepted=true;f.uiState=null;f.revision++;changed=true;
+        if(response.final){
+          f.score=(f.score||0)+(q.earnedPoints||0);f.correct=(f.correct||0)+(q.firstCorrect?1:0);f.wrong=(f.wrong||0)+(q.firstCorrect?0:1);
+          f.feedback=q;f.index++;f.question=finalQuestion(f.seed,f.index);
+          tx.create(ref.collection('finalAnswers').doc(String(q.index).padStart(6,'0')),{index:q.index,questionJson:JSON.stringify(q),receivedAt:new Date(time).toISOString()});
+        }
+      }
+      const project=changed&&f.status==='complete'?await readFinalProjection(tx,{...s,finalStage:f}):null;
+      if(changed)tx.update(ref,{finalStage:packFinal(f)});
+      if(project)project();
+      if(changed) {
+        const timerRef=db.doc(`activeFinalStages/${sid}`);
+        if(f.status==='playing')tx.set(timerRef,{classId:binding.classId,sessionId:sid,deadlineAt:f.runningSince+f.remainingMs});
+        else tx.delete(timerRef);
+      }
+      // Existing outbox is safe to mark dirty: no external calls in a transaction.
+      if(changed&&f.status==='complete'){
+        // Only queue exports that already exist; a non-exporting class must not
+        // starve the existing one-job cron queue.
+        if(exportSnap.data()?.spreadsheetId)tx.set(db.doc(`sheetJobs/${binding.classId}`),{state:'pending',dirty:`final:${sid}:${f.revision}`,nextRunAt:0});
+      }
+      const result={accepted,finalStage:safeFinal(f)};
+      if(op)tx.create(op,{fingerprint,result:{accepted}});
+      return result;
+    });
+  }
+  const getFinalStage = call((data,uid)=>finalAction(data,uid,'get'));
+  const startFinalStage = call((data,uid)=>finalAction(data,uid,'start'));
+  const saveFinalStage = call((data,uid)=>finalAction(data,uid,'save'));
+  const submitFinalAnswer = call((data,uid)=>finalAction(data,uid,'answer'));
   function opRef(uid, operation, id) { return db.doc(`operations/${digest(`${uid}:${operation}:${id}`)}`); }
   function checkOp(snap, fingerprint) { if (!snap.exists) return null; if (snap.data().fingerprint !== fingerprint) fail('REQUEST_CONFLICT'); return snap.data().resultJson ? JSON.parse(snap.data().resultJson) : snap.data().result; }
   function scoreCounts(counts = {}, oldScore, newScore) {
@@ -114,7 +209,7 @@ export function createHandlers(db, secret) {
     return { ce, ge, cc, gc, ces, ges, ccs, gcs, opaque };
   }
   function projectRank(tx, refs, s, studentData, classData, studentDoc) {
-    const score = summarize(s).score, current = refs.ces.exists ? refs.ces.data().score : null;
+    const score = rankingScore(s), current = refs.ces.exists ? refs.ces.data().score : null;
     if (current === null || score > current) {
       tx.set(refs.ce, { displayAlias: studentData.classAlias, score, studentId: s.studentId, updatedAt: now() });
       tx.set(refs.cc, { counts: scoreCounts(refs.ccs.data()?.counts, current, score), updatedAt: now() });
@@ -216,14 +311,15 @@ export function createHandlers(db, secret) {
     fields(data, ['classId', 'gameId']); if (data.gameId !== GAME.gameId) fail('INVALID_REQUEST');
     const { ref } = await ownedClass(uid, data.classId);
     const snap = await ref.collection('sessions').where('gameId', '==', GAME.gameId).limit(200).get();
-    return { sessions: snap.docs.map(d => { const s = unpackSession(d.data()), result = summarize(s); return { sessionId: d.id, studentId: s.studentId, seasonId: s.seasonId, startedAt: s.startedAt, status: s.status, progressState: s.progressState || 'running', completion: result.completion, score: result.score, correct: result.correct, wrong: result.wrong, skipped: result.skipped, unanswered: result.unanswered }; }) };
+    return { sessions: snap.docs.map(d => { const s = unpackSession(d.data()), result = summarize(s); return { sessionId: d.id, studentId: s.studentId, seasonId: s.seasonId, startedAt: s.startedAt, status: s.status, progressState: s.progressState || 'running', completion: result.completion, score: rankingScore(s), learningScore:result.score, correct: result.correct, wrong: result.wrong, skipped: result.skipped, unanswered: result.unanswered, finalStage:safeFinal(s.finalStage) }; }) };
   });
   const getSessionDetails = call(async (data, uid) => {
     fields(data, ['classId', 'sessionId']); const { ref } = await ownedClass(uid, data.classId);
     const snap = await ref.collection('sessions').doc(documentId(data.sessionId)).get();
     if (!snap.exists) fail('NOT_FOUND');
     const s = unpackSession(snap.data()), studentSnap = await ref.collection('students').doc(s.studentId).get();
-    return { result: { ...summarize(s), status: s.status, progressState: s.progressState || 'running' }, seasonId: s.seasonId, student: { privateName: studentSnap.data()?.privateName || '', classAlias: studentSnap.data()?.classAlias || '' }, answers: s.questions.filter(q => q.status === 'answered').map(q => ({ index: q.index, typeId: q.typeId, subtype: q.subtype, operands: q.operands, answer: q.answer, firstResponse: q.firstResponse, firstCorrect: q.firstCorrect, skipped: Boolean(q.skipped) })) };
+    const finalAnswers=s.finalStage?await ref.collection('sessions').doc(data.sessionId).collection('finalAnswers').orderBy('index').limit(2000).get():null;
+    return { result: { ...summarize(s), learningScore:summarize(s).score, score:rankingScore(s), status: s.status, progressState: s.progressState || 'running' }, finalStage:safeFinal(s.finalStage), finalAnswers:finalAnswers?.docs.map(d=>safeQuestion(JSON.parse(d.data().questionJson),true))||[], finalAnswersTruncated:finalAnswers?.size===2000, seasonId: s.seasonId, student: { privateName: studentSnap.data()?.privateName || '', classAlias: studentSnap.data()?.classAlias || '' }, answers: s.questions.filter(q => q.status === 'answered').map(q => ({ index: q.index, typeId: q.typeId, subtype: q.subtype, operands: q.operands, answer: q.answer, firstResponse: q.firstResponse, firstCorrect: q.firstCorrect, skipped: Boolean(q.skipped) })) };
   });
   const setClassGlobalParticipation = call(async (data, uid) => {
     fields(data, ['classId', 'enabled']); if (typeof data.enabled !== 'boolean') fail('INVALID_REQUEST');
@@ -542,12 +638,14 @@ export function createHandlers(db, secret) {
   });
 
   const getStudentGames = call(async (data, uid) => {
-    fields(data, []); const binding = await student(uid);
+    fields(data, ['catalogVersion']); if(data.catalogVersion!==undefined&&data.catalogVersion!==2)fail('INVALID_REQUEST'); const binding = await student(uid);
     const games = [];
     for (const game of GAME_CATALOG) {
+      // Already open pre-expansion bundles cannot route a new catalog ID.
+      if(game.standalone&&data.catalogVersion!==2)continue;
       const pointer = await db.doc(`activeSessions/${digest(`${uid}:${game.gameId}`)}`).get();
       const active = pointer.exists ? await readStudentSession(pointer.data().sessionId, uid, binding) : null;
-      games.push({ ...game, activeSession: active?.status === 'playing' ? active : null });
+      games.push({ ...game, activeSession: active?.status === 'playing' ? active : null, finalSession: active?.finalStage ? active : null });
     }
     return { games };
   });
@@ -675,10 +773,11 @@ export function createHandlers(db, secret) {
           sheetExport = connection.data()?.status === 'connected' && connection.data()?.subject === sheet.data().subject;
         }
         s.status = 'complete'; s.finishedAt = now(); s.endReason = 'complete';
+        s.finalStage = {version:FINAL_VERSION,status:'ready',revision:0,remainingMs:FINAL_DURATION_MS};
       }
       const response = JSON.parse(JSON.stringify({ accepted: true, final: Boolean(result.final), correct: Boolean(result.correct), session: safeSession(s) }));
       if (result.final) tx.set(sref.collection('answers').doc(String(q.index).padStart(2, '0')), { questionIndex: q.index, typeId: q.typeId, subtype: q.subtype, firstResponse: q.firstResponse, firstCorrect: q.firstCorrect, skipped: Boolean(q.skipped), requestId: data.requestId, receivedAt: now() });
-      tx.update(sref, { questionsJson: JSON.stringify(s.questions), currentIndex: s.currentIndex, feedbackIndex: s.feedbackIndex, uiState: null, revision: s.revision, status: s.status, finishedAt: s.finishedAt || null, endReason: s.endReason || null });
+      tx.update(sref, { questionsJson: JSON.stringify(s.questions), currentIndex: s.currentIndex, feedbackIndex: s.feedbackIndex, uiState: null, revision: s.revision, status: s.status, finishedAt: s.finishedAt || null, endReason: s.endReason || null, ...(s.finalStage?{finalStage:s.finalStage}:{}) });
       if (refs) projectRank(tx, refs, s, rankStudent, rankClass, studentRef(binding));
       if (sheetExport) tx.set(db.doc(`sheetJobs/${binding.classId}`), { state: 'pending', dirty: `${s.sessionId}:${s.revision}`, nextRunAt: 0 });
       tx.create(op, { fingerprint, resultJson: JSON.stringify(response) }); return response;
@@ -702,7 +801,7 @@ export function createHandlers(db, secret) {
         s.status = s.currentIndex === 50 ? 'complete' : 'incomplete'; s.finishedAt = now(); s.endReason = s.status === 'complete' ? 'complete' : data.reason;
         tx.update(sref, { status: s.status, finishedAt: s.finishedAt, endReason: s.endReason });
       }
-      if (pointer.exists && pointer.data().sessionId === sessionId) tx.delete(active);
+      if (pointer.exists && pointer.data().sessionId === sessionId && (!s.finalStage || s.finalStage.status === 'complete')) tx.delete(active);
       const result = finalResult(s); tx.create(op, { fingerprint, result }); return result;
     });
   });
@@ -761,5 +860,5 @@ export function createHandlers(db, secret) {
     return { boardKey: `${key}:${data.scope}`, scope: data.scope, asOf: now(), projectionVersion: 1, entries, nextCursor, myEntry, rankStatus: 'ready' };
   });
 
-  return { createTeacherSpace, recoverTeacherSpace, createClass, ensureClassJoinCode, listClasses, listPendingStudents, listClassSessions, getSessionDetails, setClassGlobalParticipation, approveStudent, listClassStudents, renameStudent, removeStudent, getTeacherLeaderboard, issueStudentReturnTicket, redeemStudentReturnTicket, detachStudentDevice, requestJoin, getStudentStatus, getClassLoginRoster, setStudentPin, loginStudentPin, changeStudentPin, getStudentGames, saveSession, resumeSession, startSession, getSession, submitAnswer, finishSession, setGlobalParticipation, getLeaderboard };
+  return { getFinalStage, startFinalStage, saveFinalStage, submitFinalAnswer, createTeacherSpace, recoverTeacherSpace, createClass, ensureClassJoinCode, listClasses, listPendingStudents, listClassSessions, getSessionDetails, setClassGlobalParticipation, approveStudent, listClassStudents, renameStudent, removeStudent, getTeacherLeaderboard, issueStudentReturnTicket, redeemStudentReturnTicket, detachStudentDevice, requestJoin, getStudentStatus, getClassLoginRoster, setStudentPin, loginStudentPin, changeStudentPin, getStudentGames, saveSession, resumeSession, startSession, getSession, submitAnswer, finishSession, setGlobalParticipation, getLeaderboard, finalizeOfflineStage };
 }

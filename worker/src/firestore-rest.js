@@ -59,7 +59,7 @@ class CollectionReference {
     return this.next({ filters: [...this.filters, { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: encodeValue(value) } }] });
   }
   orderBy(field, direction = 'asc') { return this.next({ ordering: [...this.ordering, { field: { fieldPath: field }, direction: direction === 'desc' ? 'DESCENDING' : 'ASCENDING' }] }); }
-  limit(maximum) { if (!Number.isInteger(maximum) || maximum < 1 || maximum > 200) throw new TypeError('Invalid query limit'); return this.next({ maximum }); }
+  limit(maximum) { if (!Number.isInteger(maximum) || maximum < 1 || maximum > 2000) throw new TypeError('Invalid query limit'); return this.next({ maximum }); }
   startAfter(score, id) { return this.next({ cursor: { score, id } }); }
   startAfterToken(token) { return this.next({ cursor: { token } }); }
   get() { return this.db.runQuery(this); }

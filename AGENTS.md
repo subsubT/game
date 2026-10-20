@@ -1,5 +1,7 @@
 # 현재 공개 서비스 운영 결정 (2026-10-07)
 
+- 2026-10-20 확장: 게임 이름은 `100까지의 수`(원본 1math2.html 무수정 연결), `덧셈과 뺄셈(1)`(기존 gameId=1math3 유지)이다. 기본 50문항은 시간 제한 없이 유지하고 새 완료 뒤 서버가 검증하는 10분 최종 스테이지를 추가한다. 사용자의 추가 지시로 기본 점수와 완료한 최종 점수를 합산해 기존 한 순위에 반영한다. 도입 전 완료 기록을 소급 변경하지 않는다. 최신 구현·백업·검증·복구 근거는 `docs/FINAL_STAGE_RELEASE.md`를 따른다. 기존 Firebase/Worker/Google/Pages를 유지한다.
+
 - 2026-10-14 개편은 A(학생 PIN 로그인) → B(게임 선택/자유 저장) → C(전체 실제 검증/main/공개 배포) 순서이며 각 PASS·상태 문서 갱신 후 중단한다. A는 `codex/student-pin-checkpoint-a`에서 개발 검증 PASS. 아직 운영에 적용하지 않았다. 현재 인계는 `docs/CHECKPOINT_A_STUDENT_PIN.md`와 `docs/DEVELOPMENT_STATE.md`를 따른다. main/Pages/기존 Worker 반영은 C에서 한다.
 - B도 `codex/game-save-checkpoint-b`에서 개발 검증 PASS. 최신 인계는 `docs/CHECKPOINT_B_GAME_PROGRESS.md`와 `docs/DEVELOPMENT_STATE.md`이다. 2026-10-14 사용자가 1math3의 시간 제한 없음을 확정했으며 새 회차/저장 전환 회차는 기한 없이 이어갈 수 있도록 구현한다. 다음은 C이며 아직 main/운영에 반영하지 않았다.
 

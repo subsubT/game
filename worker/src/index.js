@@ -117,10 +117,10 @@ async function database(env, dependencies = {}) {
   return new FirestoreRest(env.FIREBASE_PROJECT_ID, await getFirestoreAccessToken(account, fetcher), fetcher);
 }
 
+import { finalizeOfflineStages } from './final-stage-jobs.js';
 export default {
   fetch(request, env) { return handleRequest(request, env); },
   scheduled(_event, env, ctx) {
-    if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_TOKEN_ENCRYPTION_KEY) return;
-    ctx.waitUntil((async()=>{ const db = await database(env); await createSheetService(db, env).runJobs(); })().catch(()=>{ console.error('Sheets scheduled job failed'); }));
+    ctx.waitUntil((async()=>{ const db = await database(env); await finalizeOfflineStages(db,env.MATH3_SERVER_SECRET); if(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_TOKEN_ENCRYPTION_KEY)await createSheetService(db, env).runJobs(); })().catch(()=>{ console.error('Scheduled job failed'); }));
   }
 };

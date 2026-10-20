@@ -88,3 +88,7 @@ h1:focus { outline: 3px solid #ee9c2e; outline-offset: 4px; border-radius: 6px; 
 .game-tile .hero-star { font-size: 44px; margin: 0; }
 .save-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .save-controls p { width: 100%; margin: 0 0 8px; }
+/* Timed challenge status stays readable on narrow student devices. */
+.final-status { display:grid; gap:10px; padding-bottom:16px; margin-bottom:18px; border-bottom:2px solid #eee7ff; }
+.final-status strong { white-space:nowrap; font-size:clamp(15px,4vw,20px); }
+@media (min-width:620px) { .final-status { grid-template-columns:auto auto; justify-content:space-between; } }
