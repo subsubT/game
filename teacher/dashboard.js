@@ -260,7 +260,7 @@ app.addEventListener('click',event=>{
   }
   if(action==='ticket'){
     const student=state.students.find(s=>s.studentId===id);if(!student||!confirm(`${nameOf(student)} 학생의 10분 유효 일회용 복귀 티켓을 발급할까요?`))return;
-    work(async()=>{const result=await call('issueStudentReturnTicket',{classId:state.selected,studentId:id});state.ticket=result.ticket;const holder=document.createElement('section');holder.className='notice';holder.setAttribute('role','alert');holder.innerHTML=`<h3>${escapeHtml(nameOf(student))} 학생 복귀 티켓</h3><p>10분 동안 한 번만 사용할 수 있습니다. 학생의 1math3 화면에서 ‘복귀’에 입력하세요.</p><div class="key"><code>${escapeHtml(result.ticket)}</code></div><button class="button secondary small" data-action="hide-ticket">닫기</button>`;document.querySelector('.content').prepend(holder);},'복귀 티켓을 발급했습니다.');
+    work(async()=>{const result=await call('issueStudentReturnTicket',{classId:state.selected,studentId:id});state.ticket=result.ticket;const holder=document.createElement('section');holder.className='notice';holder.setAttribute('role','alert');holder.innerHTML=`<h3>${escapeHtml(nameOf(student))} 학생 복귀 티켓</h3><p>10분 동안 한 번만 사용할 수 있습니다. 학생의 덧셈과 뺄셈(1) 화면에서 ‘복귀’에 입력하세요.</p><div class="key"><code>${escapeHtml(result.ticket)}</code></div><button class="button secondary small" data-action="hide-ticket">닫기</button>`;document.querySelector('.content').prepend(holder);},'복귀 티켓을 발급했습니다.');
   }
   if(action==='hide-ticket'){button.closest('.notice')?.remove();state.ticket=null;}
 });

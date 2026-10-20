@@ -27,14 +27,18 @@ with zipfile.ZipFile(sys.argv[1]) as z:
         tables[sheet.attrib['name']]=rows
     assert all(n in tables for n in ['안내','학생요약','회차','문항'])
     summary,runs,questions=tables['학생요약'],tables['회차'],tables['문항']
-    assert len(summary)==2 and len(runs)==2 and len(questions)==54,'Unexpected record count'
-    assert float(summary[1][2])==530 and float(summary[1][3])==530 and float(summary[1][9])==1
+    expected_sessions=int(sys.argv[3]) if len(sys.argv)>3 else 1
+    assert len(summary)==2 and len(runs)==expected_sessions+1 and len(questions)==expected_sessions*50+4,'Unexpected record count'
+    assert float(summary[1][2])==530 and float(summary[1][3])==(530 if expected_sessions==1 else 500) and float(summary[1][9])==1
     assert float(runs[1][3])==530 and float(runs[1][12])==30 and float(runs[1][16])==500
     assert runs[1][11]=='complete' and float(runs[1][15])==0
-    assert len(set(r[9] for r in questions[1:]))==53,'Duplicate answer rows'
-    assert sum(r[11]=='기본 학습' for r in questions[1:])==50
+    assert len(set(r[9] for r in questions[1:]))==expected_sessions*50+3,'Duplicate answer rows'
+    assert sum(r[11]=='기본 학습' for r in questions[1:])==expected_sessions*50
     assert sum(r[11]=='최종 스테이지' for r in questions[1:])==3
     assert all('최종후보' not in str(c) and '최종격리가상' not in str(c) for t in [summary,runs,questions] for r in t for c in r),'Private name exported'
-    evidence={'result':'PASS','summaryRows':1,'sessionRows':1,'basicQuestionRows':50,'finalQuestionRows':3,'uniqueQuestionRows':53,'basicScore':500,'finalScore':30,'combinedScore':530,'privateStudentNamesExcluded':True,'errors':0}
+    if expected_sessions==2:
+        assert float(runs[2][3])==500 and runs[2][11]=='paused' and float(runs[2][12])==20
+        assert float(runs[2][15])>0 and float(runs[2][16])==500
+    evidence={'result':'PASS','summaryRows':1,'sessionRows':expected_sessions,'basicQuestionRows':expected_sessions*50,'finalQuestionRows':3,'uniqueQuestionRows':expected_sessions*50+3,'basicScore':500,'finalScore':30,'combinedBestScore':530,'partialFinalExcluded':expected_sessions==2,'privateStudentNamesExcluded':True,'errors':0}
     Path(sys.argv[2]).write_text(json.dumps(evidence,ensure_ascii=False,indent=2),encoding='utf8')
     print(json.dumps(evidence))
