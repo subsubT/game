@@ -49,6 +49,8 @@ finalStage는 같은 회차의 별도 상태이며 기본 questionsJson/50개 an
 
 기능 main 커밋 `4cf146a65adad12b9686e8d8496acc78cc2965ad`, [Pages run 39361382730](https://github.com/subsubT/game/actions/runs/39361382730) success. Worker `90c7ce49-5556-4b66-801c-c10ff5df683c`. 학생 https://subsubt.github.io/game/1math3.html · 교사 https://subsubt.github.io/game/teacher/ . 최종 문서/공개 검사 코드와 교사 복귀 안내의 새 표시명을 마지막 커밋에 반영해 다시 게시한다. 최종 문서 커밋과 run은 GitHub 이력/최종 보고에서 대조할 수 있다.
 
+공개 결과/교사 복귀 안내 반영 커밋 `7f9817c`, [Pages run 39362409440](https://github.com/subsubT/game/actions/runs/39362409440) success. 마지막 checkout 상태 검사에서 Windows CRLF 때문에 생성물의 최신 여부를 잘못 판정하는 기존 빌드 도구의 비교 문제를 발견했다. 학생 빌더 입력/비교와 Worker 빌더 비교를 LF로 정규화했고, 실제 CRLF checkout에서 두 --check 및 classic-script 검사 2개 PASS를 확인했다. 공개 실행 파일은 바꾸지 않는다. 이 검사 수정 뒤 최종 main과 같은 커밋의 산출물을 한 번 더 게시한다.
+
 - **공개 학생 전체:** 실제 게시 자산만 사용. 두 게임 표시 및 1math2 실제 이동, 기존 530점 완료 화면, 새 50문항/500점, 새 최종 2정답/20점, 저장/새로고침 뒤 점수·남은 시간 정확 복원, 아직 완료하지 않은 새 최종 기록이 기존 최고 530점을 낮추거나 재계산하지 않음 PASS. 브라우저 console/pageerror와 서버 5xx 0, 모바일 가로 넘침 없음.
 - **공개 교사:** 실제 사용자의 Chrome에서 새 표시명·530점/기본500점 상세·최종30점/완료/0초·53문항 카드와 콘솔 오류0 확인. 새 중간 회차와 완료 회차를 구분한다. 기존 Google 계정 재연결과 `나에게만 공개` 관리표는 동일 서비스에서 유지한다.
 - **공개 파일:** HTTP 200인 실제 공개 11파일이 후보 산출물과 일치. index/1math1/1math2는 시작 커밋 90c944b의 Git blob과 바이트까지 동일. 기존 세 게임의 시작·채점·콘솔 회귀 PASS(운영 점수 미작성). 새로운 서버 모듈/문제은행 모듈/문서/테스트/백업/환경 경로 404. 12파일 allowlist와 비밀값 패턴 검사 PASS.
@@ -65,7 +67,7 @@ finalStage는 같은 회차의 별도 상태이며 기본 questionsJson/50개 an
 | 서버 | functions/index.js; functions/lib/catalog.js, core.js, final-stage.js; worker/src/index.js, generated-handlers.js, firestore-rest.js, sheet-data.js, final-stage-jobs.js |
 | 교사 | teacher/index.html, dashboard.js |
 | 검사 | package.json; tests/1math3-browser-bundle.test.js, game-progress-browser.test.js, worker-emulator.test.js, final-stage.test.js, final-stage-live-browser.test.js, final-stage-public.test.js |
-| 빌드·근거 도구 | tools/build-functions.mjs, build-worker.mjs; tools/final-stage-backup.mjs, final-stage-preserve.mjs, final-stage-metadata-audit.mjs, final-stage-evidence.mjs, final-stage-security.mjs, final-stage-public-assets.mjs, final-stage-sheet.py |
+| 빌드·근거 도구 | tools/build-1math3.mjs, build-functions.mjs, build-worker.mjs; tools/final-stage-backup.mjs, final-stage-preserve.mjs, final-stage-metadata-audit.mjs, final-stage-evidence.mjs, final-stage-security.mjs, final-stage-public-assets.mjs, final-stage-sheet.py |
 | 인계 | AGENTS.md; docs/DEVELOPMENT_STATE.md, FINAL_STAGE_RELEASE.md |
 
 ## 남은 운영상 한계

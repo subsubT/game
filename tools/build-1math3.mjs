@@ -13,7 +13,7 @@ const entries = [
 async function build() {
   const parts = [];
   for (const entry of entries) {
-    const source = await readFile(new URL(entry.path, root), 'utf8');
+    const source = (await readFile(new URL(entry.path, root), 'utf8')).replace(/\r\n/g, '\n');
     let imports = 0;
     let exports = 0;
     const body = source
@@ -30,7 +30,7 @@ async function build() {
 const outputUrl = new URL('src/student/1math3.bundle.js', root);
 const output = await build();
 if (process.argv.includes('--check')) {
-  const current = await readFile(outputUrl, 'utf8').catch(() => '');
+  const current = (await readFile(outputUrl, 'utf8').catch(() => '')).replace(/\r\n/g, '\n');
   if (current !== output) {
     console.error('Browser bundle is out of date. Run: node tools/build-1math3.mjs');
     process.exitCode = 1;

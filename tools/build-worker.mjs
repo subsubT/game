@@ -47,7 +47,7 @@ const imports = body.slice(0, body.indexOf('const aliasWords ='));
 const generated = `// Generated from functions/index.js by tools/build-worker.mjs. Do not edit directly.\nimport { ApiError } from './error.js';\n${imports}\nexport const handlerNames = Object.freeze(${JSON.stringify(names)});\nexport function createHandlers(db, secret) {\n  if (!secret) throw new Error('MATH3_SERVER_SECRET is required');\n${body.slice(body.indexOf('const aliasWords =')).replace(/^/gm, '  ').replace(/^ +$/gm, '')}\n  return { ${names.join(', ')}, finalizeOfflineStage };\n}\n`;
 const target = new URL('worker/src/generated-handlers.js', root);
 if (process.argv.includes('--check')) {
-  const current = await readFile(target, 'utf8').catch(() => '');
+  const current = (await readFile(target, 'utf8').catch(() => '')).replace(/\r\n/g, '\n');
   if (current !== generated) { console.error('Worker handlers are out of date. Run: npm run build:worker'); process.exitCode = 1; }
   else console.log(`Worker handlers current (${names.length} methods).`);
 } else {
