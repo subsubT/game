@@ -76,6 +76,9 @@ test('one-time nickname maintenance updates existing boards only and preserves a
   await complete(h,'student');
   for(const [p,v] of db.rows)if(/^(classBoards|globalBoards)\//.test(p))v.displayAlias='익명별명';
   const before=structuredClone(db.rows);
+  db.rows.set('maintenance/rankingNickname20261021',{status:'pending',studentPaths:[...db.rows.keys()].filter(p=>/^classes\/[^/]+\/students\/[^/]+$/.test(p)),expectedEntries:3});
+  const mismatch=structuredClone(db.rows);await assert.rejects(migrateRankingNicknames(db,secret));assert.deepEqual(db.rows,mismatch);
+  db.rows.get('maintenance/rankingNickname20261021').expectedEntries=2;
   await migrateRankingNicknames(db,secret);
   for(const [p,v] of before)assert.deepEqual(db.rows.get(p),/^(classBoards|globalBoards)\//.test(p)?{...v,displayAlias:'기존닉네임'}:v);
   const after=structuredClone(db.rows);await migrateRankingNicknames(db,secret);assert.deepEqual(db.rows,after);

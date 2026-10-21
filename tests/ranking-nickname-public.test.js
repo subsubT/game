@@ -4,7 +4,24 @@ import assert from 'node:assert/strict';
 import {readFile,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {chromium} from 'playwright';
+import {account,call} from '../tools/checkpoint-c-live.mjs';
 const dir='.cp5-test-artifacts/ranking-nickname-20261021',site='https://subsubt.github.io/game/';
+test('actual rank API and Firestore keep authentication and class boundaries',{skip:process.env.MATH3_PAGES_TEST!=='1',timeout:90000},async()=>{
+  const a=await account(),worker='https://math3-cp3-dev.subsubt-math3-dev.workers.dev';
+  const data={gameId:'1math3',rulesVersion:'1.0.0',curriculumVersion:'1.0.0',seasonId:'2026-10',scope:'class'};
+  await call(a,'getLeaderboard',data,'PENDING_APPROVAL');await call(a,'setGlobalParticipation',{enabled:true},'PENDING_APPROVAL');
+  for(const [headers,status] of [[{origin:'https://subsubt.github.io'},401],[{origin:'https://untrusted.example',authorization:'Bearer '+a.idToken},403]]){
+    const r=await fetch(worker+'/api/getLeaderboard',{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify({data:{...data,scope:'global'}})});assert.equal(r.status,status);
+  }
+  const fixture=JSON.parse(await readFile('.cp5-test-artifacts/final-stage/live-running.json','utf8'));
+  const base='https://firestore.googleapis.com/v1/projects/math3-dev/databases/(default)/documents';
+  const path=`${base}/classes/${fixture.cls.classId}/students/${fixture.studentId}`;
+  for(const method of ['GET','PATCH']){
+    const r=await fetch(path+(method==='PATCH'?'?updateMask.fieldPaths=privateName':''),{method,headers:{authorization:'Bearer '+a.idToken,'content-type':'application/json'},...(method==='PATCH'?{body:JSON.stringify({fields:{privateName:{stringValue:fixture.privateName}}})}:{})});
+    assert.equal(r.status,403);
+  }
+  await writeFile(dir+'/access-verification.json',JSON.stringify({result:'PASS',checkedAt:new Date().toISOString(),checks:['class membership enforced','participation changes require student binding','missing authentication rejected','foreign Origin rejected','Firestore direct read and write denied']},null,2));
+});
 test('published tablet card confirmation and actual global/class nicknames',{skip:process.env.MATH3_PAGES_TEST!=='1',timeout:180000},async()=>{
   const browser=await chromium.launch({headless:true,executablePath:'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'});
   const ctx=await browser.newContext({viewport:{width:768,height:1024},hasTouch:true,isMobile:true});
@@ -14,6 +31,7 @@ test('published tablet card confirmation and actual global/class nicknames',{ski
   try{
     const global=p.waitForResponse(r=>r.url().endsWith('/api/getLeaderboard')&&r.request().postDataJSON()?.data.scope==='global');
     await p.goto(site+'1math3.html');assert.equal((await p.request.get(site+'1math3.html')).status(),200);
+    for(const path of ['tools/ranking-nickname-job.mjs','tools/ranking-nickname-migration.mjs','docs/RANKING_NICKNAME_RELEASE.md','.cp5-test-artifacts/ranking-nickname-20261021/before.json'])assert.equal((await p.request.get(site+path)).status(),404);
     const body=await (await global).json();assert.ok(body.result.entries.length>0);
     const before=JSON.parse(await readFile(dir+'/before.json','utf8'));
     const nicknames=new Set(before.students.map(s=>s.fields.privateName?.stringValue||s.fields.classAlias?.stringValue));
@@ -34,13 +52,15 @@ test('published tablet card confirmation and actual global/class nicknames',{ski
     const pair=[[0,1],[0,2],[1,2]].find(([a,b])=>nums[a]+nums[b]===10);
     for(const i of pair)await cards.nth(i).tap();await p.getByRole('button',{name:'고른 카드 확인',exact:true}).tap();await p.getByRole('heading',{name:'좋은 짝을 골랐어요!',exact:true}).waitFor();
     checks.push('tablet portrait/landscape and phone centered within 1px; touch selection and scoring work');
-    const fixture=JSON.parse(await readFile('.cp5-test-artifacts/final-stage/fixture.json','utf8'));
     const student=await browser.newContext({storageState:'.cp5-test-artifacts/final-stage/student-storage.json',viewport:{width:800,height:1280},hasTouch:true,isMobile:true});
     const s=await student.newPage();s.on('pageerror',e=>errors.push(e.message));
+    const statusResponse=s.waitForResponse(r=>r.url().endsWith('/api/getStudentStatus'));
     await s.goto(site+'1math3.html');
+    const status=(await (await statusResponse).json()).result;assert.equal(status.status,'approved');
+    const nickname=status.privateName||status.classAlias;assert.ok(nicknames.has(nickname));
     await s.getByRole('heading',{name:'어떤 게임을 할까요?',exact:true}).waitFor();
     await s.getByRole('button',{name:'친구들 순위',exact:true}).tap();await s.getByRole('tab',{name:'우리 반 순위',exact:true}).tap();
-    await s.locator('.rank-row.me').getByText(fixture.privateName+' (나)',{exact:true}).waitFor();
+    await s.locator('.rank-row.me').getByText(nickname+' (나)',{exact:true}).waitFor();
     checks.push('actual authenticated class board displays existing synthetic student nickname');
     assert.deepEqual(errors,[]);assert.deepEqual(serverErrors,[]);
     await student.close();await writeFile(dir+'/public-verification.json',JSON.stringify({result:'PASS',checkedAt:new Date().toISOString(),checks,browserErrors:errors.length,serverErrors:serverErrors.length},null,2));
