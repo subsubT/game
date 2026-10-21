@@ -1,5 +1,7 @@
 # 현재 공개 서비스 운영 결정 (2026-10-07)
 
+- 2026-10-21 수정: 기본·최종 카드 확인 버튼은 중앙 배치한다. 학급·전체 순위는 등록한 닉네임(privateName, 없는 과거 학생만 classAlias)을 표시하며 공개 참여 설정과 점수를 유지한다. 기존 기록의 표시 이름도 백업 후 갱신한다. 최신 근거·복구는 `docs/RANKING_NICKNAME_RELEASE.md`를 따른다.
+
 - 2026-10-20 확장: 게임 이름은 `100까지의 수`(원본 1math2.html 무수정 연결), `덧셈과 뺄셈(1)`(기존 gameId=1math3 유지)이다. 기본 50문항은 시간 제한 없이 유지하고 새 완료 뒤 서버가 검증하는 10분 최종 스테이지를 추가한다. 사용자의 추가 지시로 기본 점수와 완료한 최종 점수를 합산해 기존 한 순위에 반영한다. 도입 전 완료 기록을 소급 변경하지 않는다. 최신 구현·백업·검증·복구 근거는 `docs/FINAL_STAGE_RELEASE.md`를 따른다. 기존 Firebase/Worker/Google/Pages를 유지한다.
 
 - 2026-10-14 개편은 A(학생 PIN 로그인) → B(게임 선택/자유 저장) → C(전체 실제 검증/main/공개 배포) 순서이며 각 PASS·상태 문서 갱신 후 중단한다. A는 `codex/student-pin-checkpoint-a`에서 개발 검증 PASS. 아직 운영에 적용하지 않았다. 현재 인계는 `docs/CHECKPOINT_A_STUDENT_PIN.md`와 `docs/DEVELOPMENT_STATE.md`를 따른다. main/Pages/기존 Worker 반영은 C에서 한다.

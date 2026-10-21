@@ -56,6 +56,16 @@ test('Chromium portal, free save, lost response retry, reload, another device, f
     await page.getByLabel('숫자 4자리 비밀번호',{exact:true}).fill(value);
     if(confirm!==undefined)await page.getByLabel('비밀번호 한 번 더').fill(confirm);
   }
+  async function checkCardButton(page){
+    for(const viewport of [{width:768,height:1024},{width:1024,height:768},{width:800,height:1280},{width:1280,height:800},{width:390,height:844}]){
+      await page.setViewportSize(viewport);
+      const button=page.getByRole('button',{name:'고른 카드 확인',exact:true});
+      await button.scrollIntoViewIfNeeded();
+      const box=await button.boundingBox(),cards=await page.locator('.card-row').boundingBox();
+      assert.ok(Math.abs(box.x+box.width/2-(cards.x+cards.width/2))<=1,'card confirmation centered');
+      assert.ok(box.height>=48);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    }
+  }
   try {
     const first=await pageFor('first');await roster(first);
     await first.getByRole('button',{name:'처음 왔어요 · 새 이름 등록'}).click();await first.getByLabel('내 이름',{exact:true}).fill('저장학생');await pin(first,'4826','4826');
@@ -98,6 +108,7 @@ test('Chromium portal, free save, lost response retry, reload, another device, f
     await third.screenshot({path:resolve(root,'.cp5-test-artifacts/checkpoint-b/resumed-game.png'),fullPage:true});
     for(let index=2;index<=50;index++) {
       if(index===5) {
+        await checkCardButton(third);
         const q=JSON.parse(db.rows.get(sessionPath).questionsJson)[4],pair=[[0,1],[0,2],[1,2]].find(([a,b])=>q.operands[a]+q.operands[b]===10);
         for(const n of pair)await third.locator(`[data-action="card"][data-index="${n}"]`).click();
         await third.getByRole('button',{name:'저장하고 쉬기',exact:true}).click();await third.getByRole('button',{name:'이어서 하기',exact:true}).click();
@@ -116,9 +127,10 @@ test('Chromium portal, free save, lost response retry, reload, another device, f
     await third.getByRole('heading',{name:'최종 스테이지',exact:true}).waitFor();
     await third.getByRole('button',{name:'10분 도전 시작'}).click();
     const finalRaw=()=>unpackFinal(db.rows.get(sessionPath).finalStage);
+    let finalCardChecked=false;
     async function answerFinal(p){
       let q=finalRaw().question;
-      if(q.step==='pair'){for(const i of q.validPairs[0])await p.locator('[data-action="final-card"][data-index="'+i+'"]').click();await p.locator('[data-action="final-answer"]').click();await p.getByText('좋은 짝이에요! 이제 세 수의 합을 입력해요.').waitFor();}
+      if(q.step==='pair'){await checkCardButton(p);finalCardChecked=true;for(const i of q.validPairs[0])await p.locator('[data-action="final-card"][data-index="'+i+'"]').click();await p.locator('[data-action="final-answer"]').click();await p.getByText('좋은 짝이에요! 이제 세 수의 합을 입력해요.').waitFor();}
       q=finalRaw().question;await p.locator('[data-action="final-clear"]').click();await p.keyboard.type(String(q.answer));await p.locator('[data-action="final-answer"]').click();await p.getByRole('heading',{name:'맞았어요! 별 하나!',exact:true}).waitFor();await p.locator('[data-action="final-next"]').click();
     }
     await answerFinal(third);
@@ -136,16 +148,18 @@ test('Chromium portal, free save, lost response retry, reload, another device, f
     // Clear an unfinished card selection before answering the restored task.
     if(savedFinal.question.step==='pair')await fourth.locator('[data-action="final-card"][data-index="0"]').click();
     await answerFinal(fourth);await answerFinal(fourth);
+    for(let n=0;n<5&&!finalCardChecked;n++)await answerFinal(fourth);
+    assert.ok(finalCardChecked);
     const row=db.rows.get(sessionPath);row.finalStage.runningSince-=600001;
     await fourth.reload();await fourth.getByRole('button',{name:'최종 스테이지',exact:true}).click();await fourth.getByRole('heading',{name:'최종 스테이지 완료!'}).waitFor();
-    assert.equal(finalRaw().score,30);await fourth.getByText('합산: 40점',{exact:false}).waitFor();
-    assert.equal((await h.getTeacherLeaderboard({classId:cls.classId,seasonId:row.seasonId},'teacher')).entries[0].score,40);
+    const total=10+finalRaw().score;await fourth.getByText(`합산: ${total}점`,{exact:false}).waitFor();
+    assert.equal((await h.getTeacherLeaderboard({classId:cls.classId,seasonId:row.seasonId},'teacher')).entries[0].score,total);
     await fourth.screenshot({path:resolve(root,'.cp5-test-artifacts/final-stage/browser-complete.png'),fullPage:true});
     await fourth.getByRole('button',{name:'학습 결과 보기'}).click();
     await fourth.getByText('서버 저장 완료').waitFor();await fourth.getByText('순위 반영 완료').waitFor();assert.equal(JSON.parse(db.rows.get(sessionPath).questionsJson).filter(q=>q.firstCorrect).length,1);
     await fourth.getByRole('button',{name:'처음 화면',exact:true}).click();await fourth.getByRole('button',{name:'게임 고르기'}).waitFor();assert.equal(await fourth.getByRole('button',{name:'이어서 하기',exact:true}).count(),0);
     await teacher.getByRole('button',{name:'새로고침',exact:true}).click();await teacher.getByRole('tab',{name:/학생 기록/}).click();await teacher.getByLabel('학생 선택').selectOption(sid);
-    await teacher.getByRole('button',{name:/1번째 기록 · 40점 · 완료/}).click();await teacher.locator('.question').nth(49).waitFor();assert.equal(await teacher.locator('.question').count(),53);
+    await teacher.getByRole('button',{name:new RegExp(`1번째 기록 · ${total}점 · 완료`)}).click();await teacher.locator('.question').nth(49).waitFor();assert.equal(await teacher.locator('.question').count(),50+finalRaw().index);
     assert.equal([...db.rows.keys()].filter(p=>p.includes('/sessions/')&&!p.includes('/answers/')&&!p.includes('/finalAnswers/')).length,1);
   } finally {await Promise.all(contexts.map(c=>c.close()));await browser.close();}
   assert.deepEqual(errors,[]);

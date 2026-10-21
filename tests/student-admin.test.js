@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {createHandlers} from '../worker/src/generated-handlers.js';
 import {MemoryDb} from './sheets-fakes.js';
 import {buildTables} from '../worker/src/sheet-data.js';
+import {migrateRankingNicknames} from '../tools/ranking-nickname-job.mjs';
 const id=()=>crypto.randomUUID(),secret='student-administration-test-only';
 async function fixture(){const db=new MemoryDb(),h=createHandlers(db,secret);await h.createTeacherSpace({requestId:id()},'teacher');await h.createTeacherSpace({requestId:id()},'other-teacher');const cls=await h.createClass({privateLabel:'학생관리검증반',requestId:id()},'teacher');return{db,h,cls};}
 const denied=(p,code)=>assert.rejects(p,e=>e.code===code);
@@ -49,4 +50,33 @@ test('removal revokes sessions and tickets, removes only this student from ranks
   await denied(h.redeemStudentReturnTicket({ticket:ticket.ticket,requestId:id()},'new-device'),'FORBIDDEN');await denied(h.renameStudent({...args,privateName:'삭제후이름'},'teacher'),'NOT_FOUND');
   const tables=await buildTables(db,cls.classId,'검증반',secret);assert.equal(tables['학생요약'].length,2);assert.equal(tables['회차'].length,2);
   await h.setClassGlobalParticipation({classId:cls.classId,enabled:false},'teacher');await h.setClassGlobalParticipation({classId:cls.classId,enabled:true},'teacher');assert.equal([...db.rows.keys()].filter(k=>k.startsWith('globalBoards/')&&k.includes('/entries/')).length,1);
+});
+
+test('ranks use registered nicknames, rename both boards and preserve scores through opt-out and restore',async()=>{
+  const {db,h,cls}=await fixture();
+  await h.requestJoin({pin:'4826',pinConfirm:'4826',privateName:'별빛친구',code:cls.code,requestId:id()},'student');
+  const s=await complete(h,'student'),sid=db.rows.get('studentBindings/student').studentId;
+  const ranks=()=>[...db.rows].filter(([p])=>/^(classBoards|globalBoards)\//.test(p)&&p.includes('/entries/'));
+  assert.equal(ranks().length,2);assert.ok(ranks().every(([,v])=>v.displayAlias==='별빛친구'));
+  const counts=structuredClone([...db.rows].filter(([p])=>p.startsWith('boardCounts/')));
+  const ledger=structuredClone(db.rows.get(`classes/${cls.classId}/sessions/${s.sessionId}`));
+  await h.renameStudent({classId:cls.classId,studentId:sid,privateName:'새닉네임',requestId:id()},'teacher');
+  assert.ok(ranks().every(([,v])=>v.displayAlias==='새닉네임'&&v.score===0));
+  assert.deepEqual([...db.rows].filter(([p])=>p.startsWith('boardCounts/')),counts);
+  assert.deepEqual(db.rows.get(`classes/${cls.classId}/sessions/${s.sessionId}`),ledger);
+  for(const toggle of [enabled=>h.setGlobalParticipation({enabled},'student'),enabled=>h.setClassGlobalParticipation({classId:cls.classId,enabled},'teacher')]){
+    await toggle(false);assert.equal(ranks().length,1);
+    await h.renameStudent({classId:cls.classId,studentId:sid,privateName:'새닉네임',requestId:id()},'teacher');assert.equal(ranks().length,1);
+    await toggle(true);assert.equal(ranks().length,2);assert.ok(ranks().every(([,v])=>v.displayAlias==='새닉네임'&&v.score===0));
+  }
+});
+
+test('one-time nickname maintenance updates existing boards only and preserves all scores, counts and student records',async()=>{
+  const {db,h,cls}=await fixture();await h.requestJoin({pin:'4826',pinConfirm:'4826',privateName:'기존닉네임',code:cls.code,requestId:id()},'student');
+  await complete(h,'student');
+  for(const [p,v] of db.rows)if(/^(classBoards|globalBoards)\//.test(p))v.displayAlias='익명별명';
+  const before=structuredClone(db.rows);
+  await migrateRankingNicknames(db,secret);
+  for(const [p,v] of before)assert.deepEqual(db.rows.get(p),/^(classBoards|globalBoards)\//.test(p)?{...v,displayAlias:'기존닉네임'}:v);
+  const after=structuredClone(db.rows);await migrateRankingNicknames(db,secret);assert.deepEqual(db.rows,after);
 });

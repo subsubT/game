@@ -215,14 +215,14 @@ async function rankRefs(tx, classId, studentId, key) {
 function projectRank(tx, refs, s, studentData, classData, studentDoc) {
   const score = rankingScore(s), current = refs.ces.exists ? refs.ces.data().score : null;
   if (current === null || score > current) {
-    tx.set(refs.ce, { displayAlias: studentData.classAlias, score, studentId: s.studentId, updatedAt: now() });
+    tx.set(refs.ce, { displayAlias: studentData.privateName || studentData.classAlias, score, studentId: s.studentId, updatedAt: now() });
     tx.set(refs.cc, { counts: scoreCounts(refs.ccs.data()?.counts, current, score), updatedAt: now() });
     tx.update(studentDoc, { bestScores: { ...(studentData.bestScores || {}), [boardOf(s.seasonId)]: score } });
   }
   if (studentData.globalOptIn !== false && classData.globalOptIn !== false) {
     const previous = refs.ges.exists ? refs.ges.data().score : null;
     if (previous === null || score > previous) {
-      tx.set(refs.ge, { displayAlias: aliasOf(`${refs.opaque}:${s.seasonId}`, true), score, updatedAt: now() });
+      tx.set(refs.ge, { displayAlias: studentData.privateName || studentData.classAlias, score, updatedAt: now() });
       tx.set(refs.gc, { counts: scoreCounts(refs.gcs.data()?.counts, previous, score), updatedAt: now() });
     }
   }
@@ -332,7 +332,7 @@ export const setClassGlobalParticipation = call(async (data, uid) => {
     const [cls, students] = await Promise.all([tx.get(ref), tx.get(ref.collection('students').where('status', '==', 'active'))]);
     const items = [];
     if (!cls.exists) fail('NOT_FOUND');
-    for (const doc of students.docs) for (const [key, score] of Object.entries(doc.data().bestScores || {})) items.push({ key, score, studentId: doc.id, studentGlobalOptIn: doc.data().globalOptIn !== false });
+    for (const doc of students.docs) for (const [key, score] of Object.entries(doc.data().bestScores || {})) items.push({ key, score, studentId: doc.id, displayAlias: doc.data().privateName || doc.data().classAlias, studentGlobalOptIn: doc.data().globalOptIn !== false });
     if (items.length > 200) fail('RATE_LIMITED');
     const entries = await Promise.all(items.map(async item => {
       const opaque = digest(`${data.classId}:${item.studentId}:${item.key}`).slice(0, 32);
@@ -346,7 +346,7 @@ export const setClassGlobalParticipation = call(async (data, uid) => {
     for (const item of entries) {
       const bucket = counts.get(item.key);
       if (data.enabled && item.studentGlobalOptIn && !item.snap.exists) {
-        tx.set(item.entryRef, { displayAlias: aliasOf(`${item.opaque}:${item.key.split(':').at(-1)}`, true), score: item.score, updatedAt: now() });
+        tx.set(item.entryRef, { displayAlias: item.displayAlias, score: item.score, updatedAt: now() });
         bucket[item.score] = (bucket[item.score] || 0) + 1;
       } else if (!data.enabled && item.snap.exists) {
         tx.delete(item.entryRef);
@@ -384,8 +384,15 @@ export const renameStudent = call(async (data, uid) => {
     const [prior, snap, sheet] = await Promise.all([tx.get(op), tx.get(sref), tx.get(db.doc(`sheetExports/${data.classId}`))]);
     const saved = checkOp(prior, fp); if (saved) return saved;
     if (!snap.exists || snap.data().status !== 'active') fail('NOT_FOUND');
-    tx.create(db.doc(`studentAdminBackups/${randomId()}`), { action: 'rename', classId: data.classId, studentId: sid, before: snap.data(), changedBy: uid, createdAt: now() });
+    const keys = Object.keys(snap.data().bestScores || {});
+    if (keys.length > 100) fail('RATE_LIMITED');
+    const ranks = await Promise.all(keys.map(key => rankRefs(tx, data.classId, sid, key)));
+    tx.create(db.doc(`studentAdminBackups/${randomId()}`), { action: 'rename', classId: data.classId, studentId: sid, before: snap.data(), ranks: ranks.map(r => ({ classEntryPath: r.ce.path, globalEntryPath: r.ge.path, classEntry: r.ces.data() || null, globalEntry: r.ges.data() || null })), changedBy: uid, createdAt: now() });
     tx.update(sref, { privateName, renamedAt: now() });
+    for (const r of ranks) {
+      if (r.ces.exists) tx.update(r.ce, { displayAlias: privateName });
+      if (r.ges.exists) tx.update(r.ge, { displayAlias: privateName });
+    }
     if (sheet.data()?.spreadsheetId) tx.set(db.doc(`sheetJobs/${data.classId}`), { state: 'pending', dirty: randomId(), nextRunAt: 0 });
     const result = { studentId: sid, privateName }; tx.create(op, { fingerprint: fp, result }); return result;
   });
@@ -828,7 +835,7 @@ export const setGlobalParticipation = call(async (data, uid) => {
     for (const item of operations) {
       const shouldExist = data.enabled && cls.data().globalOptIn !== false;
       if (shouldExist && !item.e.exists) {
-        tx.set(item.entry, { displayAlias: aliasOf(`${item.opaque}:${item.key.split(':').at(-1)}`, true), score: item.score, updatedAt: now() });
+        tx.set(item.entry, { displayAlias: current.data().privateName || current.data().classAlias, score: item.score, updatedAt: now() });
         tx.set(item.count, { counts: scoreCounts(item.c.data()?.counts, null, item.score), updatedAt: now() });
       } else if (!shouldExist && item.e.exists) {
         tx.delete(item.entry); tx.set(item.count, { counts: scoreCounts(item.c.data()?.counts, item.e.data().score, null), updatedAt: now() });
